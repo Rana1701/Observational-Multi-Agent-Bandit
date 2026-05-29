@@ -4,7 +4,11 @@ import random
 class UCB():
     '''Simple class implementing the UCB (Upper Confidence Bound) algorithm on a k-armed bandit.'''
     
-    def __init__(self):
+    def __init__(self, reward_fn=None, delta=0.2):
+        # injected reward function
+        self.reward_fn = reward_fn if reward_fn is not None else self._default_reward_fn
+        self.delta = delta
+
         #number of own plays for arms 0 and 1
         self.nb_plays = [0, 0]
         
@@ -41,7 +45,7 @@ class UCB():
                 #tie breaker
                 action = random.choice([0, 1])
         
-        step_reward = self.getReward(action)
+        step_reward = self.reward_fn(action)
         
         #update values
         if action == 0:
@@ -54,8 +58,8 @@ class UCB():
             self.nb_plays[1] += 1
             self.avg_reward[1] += (step_reward - self.avg_reward[1]) / self.nb_plays[1]
             
-            #add regret, where 0.2 is the gap between arms
-            step_regret = 0.2
+            #add regret according to the expected gap
+            step_regret = self.delta
         
         if self.t > 1:
             self.cumul_regret.append(self.cumul_regret[-1] + step_regret)
@@ -64,23 +68,17 @@ class UCB():
         
         return action
     
-    def getReward(self, arm_played):
-        '''Returns a reward from a Bernoulli distribution associated with the arm'''
-        
-        #determines arm win rate. Arm 0 is optimal.
+    def _default_reward_fn(self, arm_played):
         win_rate = [0.6, 0.4]
-        
         pull = np.random.rand()
-        
         if arm_played == 0 and pull < win_rate[0]:
-            #win
             return 1
         elif arm_played == 1 and pull < win_rate[1]:
-            #win
             return 1
-        else:
-            #loss
-            return 0
+        return 0
+
+    def getReward(self, arm_played):
+        return self.reward_fn(arm_played)
 
 
 def main():
