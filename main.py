@@ -18,7 +18,7 @@ def main():
         for i in range(nb_agents) :
             #chaque agents regarde les actions des autres agents, mais pas la sienne
             actions[i]= agents[i].getNextAction(prev_actions [0:i]+prev_actions[(i+1):]) 
-
+            
 
 
 

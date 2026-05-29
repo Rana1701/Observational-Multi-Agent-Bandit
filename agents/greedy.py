@@ -2,17 +2,17 @@ import numpy as np
 import random
 
 class Greedy():
-    '''Simple class implementing the Epsilon-Greedy algorithm on a 2-armed bandit.'''
+    '''Greedy follower that mimics the target's most frequent action.'''
     
-    def __init__(self, epsilon=0.1):
-        #exploration rate
-        self.epsilon = epsilon
+    def __init__(self, reward_fn=None, delta=0.2):
+        self.reward_fn = reward_fn if reward_fn is not None else self._default_reward_fn
+        self.delta = delta
+        
+        #number of times target played each arm
+        self.target_plays = [0, 0]
         
         #number of own plays for arms 0 and 1
         self.nb_plays = [0, 0]
-        
-        #average reward of each arm
-        self.avg_reward = [0, 0]
         
         #step (play) number
         self.t = 0
@@ -20,45 +20,46 @@ class Greedy():
         #cumulative regret
         self.cumul_regret = []
     
-    def getNextAction(self):
-        '''Outputs the next action based on epsilon-greedy strategy'''
+    def getNextAction(self, prev_actions=[]):
+        '''Selects the action most frequently chosen by the target (greedy follower).
+        
+        Args:
+            prev_actions: List of previous actions from the target (or neighbor)
+        '''
         
         self.t += 1
         
-        #exploration vs exploitation
-        if np.random.rand() < self.epsilon:
-            #explore: random arm selection
-            action = random.choice([0, 1])
-        else:
-            #exploit: select best arm so far
-            if self.nb_plays[0] == 0:
-                #play arm 0 for the first time
-                action = 0
-            elif self.nb_plays[1] == 0:
-                #play arm 1 for the first time
-                action = 1
-            else:
-                #select arm with highest average reward
-                if self.avg_reward[0] != self.avg_reward[1]:
-                    action = np.argmax(self.avg_reward)
-                else:
-                    #tie breaker
-                    action = random.choice([0, 1])
+        # Update target play counts from previous actions
+        if len(prev_actions) > 0 and self.t > 1:
+            for a in prev_actions:
+                if a == 0:
+                    self.target_plays[0] += 1
+                elif a == 1:
+                    self.target_plays[1] += 1
         
-        step_reward = self.getReward(action)
+        # Select the action the target has played most often
+        if self.target_plays[0] == 0 and self.target_plays[1] == 0:
+            # First action: arbitrary choice
+            action = 0
+        elif self.target_plays[0] > self.target_plays[1]:
+            action = 0
+        elif self.target_plays[1] > self.target_plays[0]:
+            action = 1
+        else:
+            # Tie: random choice
+            action = random.choice([0, 1])
+        
+        step_reward = self.reward_fn(action)
         
         #update values
         if action == 0:
             self.nb_plays[0] += 1
-            self.avg_reward[0] += (step_reward - self.avg_reward[0]) / self.nb_plays[0]
             step_regret = 0
             
         elif action == 1:
             self.nb_plays[1] += 1
-            self.avg_reward[1] += (step_reward - self.avg_reward[1]) / self.nb_plays[1]
-            
-            #add regret 0.2 = the gap between arms
-            step_regret = 0.2
+            #add regret according to the expected gap
+            step_regret = self.delta
         
         if self.t > 1:
             self.cumul_regret.append(self.cumul_regret[-1] + step_regret)
@@ -67,20 +68,17 @@ class Greedy():
         
         return action
     
-    def getReward(self, arm_played):
-        '''Returns a reward from a Bernoulli distribution associated with the arm'''
-        
+    def _default_reward_fn(self, arm_played):
         win_rate = [0.6, 0.4]
-        
         pull = np.random.rand()
-        
         if arm_played == 0 and pull < win_rate[0]:
             return 1
         elif arm_played == 1 and pull < win_rate[1]:
             return 1
-        else:
-            
-            return 0
+        return 0
+
+    def getReward(self, arm_played):
+        return self.reward_fn(arm_played)
 
 
 def main():
