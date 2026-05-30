@@ -1,42 +1,57 @@
-from tucb import TUCB
+from agents.ucb import UCB as UCBAgent
+from agents.greedy import Greedy as GreedyAgent
+from agents.llm import LLMAgent
+from utils.reward_function import reward_fn
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
 def main():
     
     agents = []
-    nb_agents = 4
+    nb_agents = 3
     nb_plays = 100
-    actions = [0,1,2,3]
+    actions = [0,1]
 
-    for i in range(nb_agents) : 
-        agents.append(TUCB(nb_agents - 1))
+    reward = reward_fn(0.6, 0.4)
+    delta = 0.6 - 0.4
+
+    ucb = UCBAgent(reward_fn=reward, delta=delta)
+    greedy = GreedyAgent(reward_fn=reward, delta=delta)
+    llm = LLMAgent()
+
+    agents.append(ucb)
+    agents.append(greedy)
+    agents.append(llm)
 
     prev_actions = []
     for t in range(nb_plays) :
         prev_actions = list(actions)
         for i in range(nb_agents) :
-            #chaque agents regarde les actions des autres agents, mais pas la sienne
-            actions[i]= agents[i].getNextAction(prev_actions [0:i]+prev_actions[(i+1):]) 
+            ucb_action = ucb.getNextAction()
+            greedy_action = greedy.getNextAction(prev_actions)
+            llm_action = llm.getNextAction(prev_actions)
+            llm.update_history("ucb", ucb_action)
+            llm.update_history("greedy", greedy_action)
             
-
-
 
     #The display  
     plt.figure(figsize=(12,8))
     i=1
-    for a in agents:
-        plt.plot(a.cumul_regret, label = "Agent " + str(i))
-        i += 1
+
+    plt.plot(ucb.cumul_regret, label = "UCB")
+    plt.plot(greedy.cumul_regret, label = "Greedy")
+    plt.plot(llm.cumul_regret, label = "LLM")
+
     plt.xlabel("Plays", fontsize = 14)
     plt.ylabel("Cumulative regret", fontsize = 14)
     plt.xticks(fontsize = 14)
     plt.yticks(fontsize = 14)
     plt.legend(fontsize = 14)
-    plt.title("Cumulative Regret of 4 TUCB Agents in a Fully Connected Graph", fontsize = 20)
-    plt.savefig("TUCB_cumul_regretpng")
-    plt.show()
-    
+    plt.title("Cumulative Regret of 3 Agents in a Fully Connected Graph", fontsize = 20)
+    plt.savefig("LLM_cumul_regret.png")
+    print("Figure saved as 'LLM_cumul_regret.png'")
 
 if __name__ == "__main__":
     main()
