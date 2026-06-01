@@ -1,10 +1,11 @@
 import json
+import random
+from vllm import LLM
 from utils.reward_function import reward_fn
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
 class LLMAgent:
-    def __init__(self, name_parameter="Qwen/Qwen2.5-7B-Instruct"):
-        self.model, self.tokenizer = self.charging_model(name_parameter)
+    def __init__(self, name_parameter="Qwen/Qwen2.5-7B-Instruct", model=None):
+        self.model = model if model is not None else self.charging_model(name_parameter)
         self.target = {}
         self.history = ""
         self.default_prompt = ""
@@ -14,36 +15,16 @@ class LLMAgent:
         self.reward_fn = reward_fn()
 
     def ask(self, prompt):
-        if self.model is None or self.tokenizer is None:
-            return {"action": 0, "explication": "no model loaded - default action"}
+        if self.model is None:
+            print("Model loading failed. Using fallback action.")
+            return {"action": random.choice([0, 1]), "explication": "no model loaded - fallback action"}
 
-        model, tokenizer = self.model, self.tokenizer
+        try:
+            result = self.model.generate([prompt], max_new_tokens=64)
+            response = result[0].outputs[0].text
+        except Exception:
+            return {"action": random.choice([0, 1]), "explication": "model generation failed"}
 
-        messages = [
-            {"role": "system", "content": "You are Qwen, created by Alibaba Cloud. You are a helpful assistant."},
-            {"role": "user", "content": prompt}
-        ]
-
-        text = tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True
-        )
-
-
-        # generating the model's response
-        model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
-        generated_ids = model.generate(
-            **model_inputs,
-            max_new_tokens=512
-        )
-        generated_ids = [
-            output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
-        ]
-
-        response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        
-        #Converting to json  
         json_start = response.find('{')
         if json_start != -1:
             response = response[json_start:]
@@ -51,7 +32,7 @@ class LLMAgent:
         try:
             return json.loads(response)
         except json.JSONDecodeError:
-            return {"action": 0, "explication": "default action"}
+            return {"action": random.choice([0, 1]), "explication": "default fallback action"}
 
     def getNextAction(self):
         self.t += 1
@@ -98,14 +79,10 @@ class LLMAgent:
         self.history += f"{model} - Action: {action}\n"
 
     def charging_model(self, name_parameter="Qwen/Qwen2.5-7B-Instruct"):
-        model_name = name_parameter
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            torch_dtype="auto",
-            device_map="auto"
-        )
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        return model, tokenizer
+        try:
+            return LLM(model=name_parameter)
+        except Exception:
+            return None
 
     def getReward(self, arm_played):
         return self.reward_fn(arm_played)
@@ -114,8 +91,15 @@ class LLMAgent:
 def main():
     import matplotlib.pyplot as plt
     
+    # Test vllm simple
+    print("Testing vLLM...")
+    llm = LLM(model="Qwen/Qwen2.5-7B-Instruct")
+    outputs = llm.generate(["The capital of France is"])
+    text = outputs[0].outputs[0].text
+    print(f"vLLM output: {text}")
+    
     '''Runs a LLM agent for 10 plays'''
-    agent = LLMAgent()  
+    agent = LLMAgent(model=llm)  
     
     for _ in range(10):
         agent.getNextAction()

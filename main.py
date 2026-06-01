@@ -1,3 +1,5 @@
+from vllm import LLM
+
 from agents.ucb import UCB as UCBAgent
 from agents.greedy import Greedy as GreedyAgent
 from agents.llm import LLMAgent
@@ -10,16 +12,16 @@ import matplotlib.pyplot as plt
 def main():
     
     agents = []
-    nb_agents = 3
-    nb_plays = 50
+    nb_plays = 100
     actions = [0,1]
 
     reward = reward_fn(0.6, 0.4)
     delta = 0.6 - 0.4
-
+    
     ucb = UCBAgent(reward_fn=reward, delta=delta)
     greedy = GreedyAgent(reward_fn=reward, delta=delta)
-    llm = LLMAgent()
+    llm = LLM(model="Qwen/Qwen2.5-7B-Instruct")
+    llm = LLMAgent(model=llm)
 
     agents.append(ucb)
     agents.append(greedy)
