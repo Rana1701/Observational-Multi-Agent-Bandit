@@ -7,15 +7,16 @@ class LLMAgent:
         self.model, self.tokenizer = self.charging_model(name_parameter)
         self.target = {}
         self.history = ""
-        self.round = 0
         self.default_prompt = ""
         self.cumul_regret = []
         self.t = 0
         self.delta = 0.2
-        # reward_fn in utils is a factory; call it to get a usable reward function
         self.reward_fn = reward_fn()
 
     def ask(self, prompt):
+        if self.model is None or self.tokenizer is None:
+            return {"action": 0, "explication": "no model loaded - default action"}
+
         model, tokenizer = self.model, self.tokenizer
 
         messages = [
@@ -42,21 +43,20 @@ class LLMAgent:
 
         response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
         
-        #Convertir la réponse en json 
+        #Converting to json  
         json_start = response.find('{')
         if json_start != -1:
             response = response[json_start:]
 
-        return json.loads(response)
+        try:
+            return json.loads(response)
+        except json.JSONDecodeError:
+            return {"action": 0, "explication": "default action"}
 
-    def getNextAction(self, prev_actions=None):
-        if prev_actions is None:
-            prev_actions = []
-
-        self.round += 1
+    def getNextAction(self):
         self.t += 1
 
-        if self.round == 1:
+        if self.t == 1:
             self.default_prompt = (
                 "You are a multi-armed bandit agent. You have 2 arms to choose from."
                 " Each arm has a certain probability of giving a reward."
@@ -65,14 +65,13 @@ class LLMAgent:
                 " but not their rewards."
                 " Based on the actions of the other agents and your own experience,"
                 " you need to decide which arm to pull next."
+                "Please answer in the following JSON format: "
+                "{\"action\": 0, \"explication\": \"Your explanation here\"}"
             )
 
         prompt = self.default_prompt + f" Your history of actions and rewards is as follows:\n{self.history}\n"
         prompt += "Based on this history, and the previous actions of the other agents, which arm should you pull next? "
-        prompt += (
-            "Please answer in the following JSON format: "
-            "{\"action\": 0, \"explication\": \"Your explanation here\"}"
-        )
+
 
         try:
             response = self.ask(prompt)
@@ -112,4 +111,27 @@ class LLMAgent:
         return self.reward_fn(arm_played)
 
         
-            
+def main():
+    import matplotlib.pyplot as plt
+    
+    '''Runs a LLM agent for 10 plays'''
+    agent = LLMAgent()  
+    
+    for _ in range(10):
+        agent.getNextAction()
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(agent.cumul_regret, label="LLM Agent ")
+    plt.xlabel("Plays", fontsize=14)
+    plt.ylabel("Cumulative regret", fontsize=14)
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.legend(fontsize=14)
+    plt.title("Cumulative Regret of LLM Agent", fontsize=20)
+    plt.savefig("LLM_cumul_regret.png")
+    plt.show()
+
+
+if __name__ == "__main__":
+    main()
+
