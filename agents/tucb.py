@@ -143,7 +143,11 @@ def main():
     plt.yticks(fontsize = 14)
     plt.legend(fontsize = 14)
     plt.title("Cumulative Regret of 4 TUCB Agents in a Fully Connected Graph", fontsize = 20)
-    plt.savefig("TUCB_cumul_regret.png")
+    from pathlib import Path
+    base_dir = Path(__file__).resolve().parent.parent
+    out_file = base_dir / "figs" / "TUCB_cumul_regret.png"
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(out_file)
     plt.show()
     
 

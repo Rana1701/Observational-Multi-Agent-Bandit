@@ -1,12 +1,13 @@
 import numpy as np
 import random
 
-class Greedy():
-    '''Greedy that mimics the target's most frequent action.'''
+class E_Greedy():
+    '''Epsilon-greedy that mimics the target's most frequent action.'''
     
-    def __init__(self, reward_fn=None, delta=0.2):
+    def __init__(self, reward_fn=None, delta=0.2, epsilon=0.1):
         self.reward_fn = reward_fn if reward_fn is not None else self._default_reward_fn
         self.delta = delta
+        self.epsilon = epsilon
         
         self.nb_plays = [0, 0]
         
@@ -19,17 +20,19 @@ class Greedy():
         self.values = [0.0, 0.0]
     
     def getNextAction(self):
-        """Greedy: always exploit the best estimated value."""
+        """Epsilon-greedy: with prob. epsilon explore, else exploit estimated values."""
 
         self.t += 1
-
         # choose action: 
-        if self.values[0] > self.values[1]:
-            action = 0
-        elif self.values[1] > self.values[0]:
-            action = 1
-        else:
+        if random.random() < self.epsilon:
             action = random.choice([0, 1])
+        else:
+            if self.values[0] > self.values[1]:
+                action = 0
+            elif self.values[1] > self.values[0]:
+                action = 1
+            else:
+                action = random.choice([0, 1])
 
         # observe reward 
         reward = self.reward_fn(action)
@@ -64,23 +67,23 @@ class Greedy():
 def main():
     import matplotlib.pyplot as plt
     
-    '''Runs a  Greedy agent for 100 plays'''
-    agent = Greedy()
+    '''Runs an epsilon Greedy agent for 100 plays'''
+    agent = E_Greedy(epsilon=0.1)
     
     for _ in range(100):
         agent.getNextAction()
     
     plt.figure(figsize=(10, 6))
-    plt.plot(agent.cumul_regret, label="Greedy Agent")
+    plt.plot(agent.cumul_regret, label="Epsilon-Greedy Agent (ε=0.1)")
     plt.xlabel("Plays", fontsize=14)
     plt.ylabel("Cumulative regret", fontsize=14)
     plt.xticks(fontsize=14)
     plt.yticks(fontsize=14)
     plt.legend(fontsize=14)
-    plt.title("Cumulative Regret of Greedy Agent", fontsize=20)
+    plt.title("Cumulative Regret of Epsilon-Greedy Agent", fontsize=20)
     from pathlib import Path
     base_dir = Path(__file__).resolve().parent.parent
-    out_file = base_dir / "figs" / "Greedy_cumul_regret.png"
+    out_file = base_dir / "figs" / "E_Greedy_cumul_regret.png"
     out_file.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(out_file)
     plt.show()

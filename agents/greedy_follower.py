@@ -1,19 +1,18 @@
 import numpy as np
 import random
 
-class UCB():
-    '''Simple class implementing the UCB (Upper Confidence Bound) algorithm on a k-armed bandit.'''
+class Greedy():
+    '''Greedy follower that mimics the target's most frequent action.'''
     
     def __init__(self, reward_fn=None, delta=0.2):
-        # injected reward function
         self.reward_fn = reward_fn if reward_fn is not None else self._default_reward_fn
         self.delta = delta
-
+        
+        #number of times target played each arm
+        self.target_plays = [0, 0]
+        
         #number of own plays for arms 0 and 1
         self.nb_plays = [0, 0]
-        
-        #average reward
-        self.avg_reward = [0, 0]
         
         #step (play) number
         self.t = 0
@@ -21,43 +20,44 @@ class UCB():
         #cumulative regret
         self.cumul_regret = []
     
-    def getNextAction(self):
-        '''Outputs the next action based on UCB strategy'''
+    def getNextAction(self, prev_actions=[]):
+        '''Selects the action most frequently chosen by the target (greedy follower).
+        
+        Args:
+            prev_actions: List of previous actions from the target (or neighbor)
+        '''
         
         self.t += 1
         
-        if self.nb_plays[0] == 0:
-            #play arm 0 for the first time
+        # Update target play counts from previous actions
+        if len(prev_actions) > 0 and self.t > 1:
+            for a in prev_actions:
+                if a == 0:
+                    self.target_plays[0] += 1
+                elif a == 1:
+                    self.target_plays[1] += 1
+        
+        # Select the action the target has played most often
+        if self.target_plays[0] == 0 and self.target_plays[1] == 0:
+            # First action: arbitrary choice
             action = 0
-        elif self.nb_plays[1] == 0:
-            #play arm 1 for the first time
+        elif self.target_plays[0] > self.target_plays[1]:
+            action = 0
+        elif self.target_plays[1] > self.target_plays[0]:
             action = 1
         else:
-            #get UCB values for each arm
-            ucb_values = [0, 0]
-            ucb_values[0] = self.avg_reward[0] + np.sqrt(2 * np.log(self.t) / self.nb_plays[0])
-            ucb_values[1] = self.avg_reward[1] + np.sqrt(2 * np.log(self.t) / self.nb_plays[1])
-            
-            #select arm with highest UCB value
-            if ucb_values[0] != ucb_values[1]:
-                action = np.argmax(ucb_values)
-            else:
-                #tie breaker
-                action = random.choice([0, 1])
+            # Tie: random choice
+            action = random.choice([0, 1])
         
         step_reward = self.reward_fn(action)
         
         #update values
         if action == 0:
             self.nb_plays[0] += 1
-            self.avg_reward[0] += (step_reward - self.avg_reward[0]) / self.nb_plays[0]
-            
-            #no added regret since arm 0 is optimal
             step_regret = 0
+            
         elif action == 1:
             self.nb_plays[1] += 1
-            self.avg_reward[1] += (step_reward - self.avg_reward[1]) / self.nb_plays[1]
-            
             #add regret according to the expected gap
             step_regret = self.delta
         
@@ -84,25 +84,21 @@ class UCB():
 def main():
     import matplotlib.pyplot as plt
     
-    '''Runs a UCB agent for 100 plays'''
-    agent = UCB()
+    '''Runs a Greedy agent for 100 plays'''
+    agent = Greedy(epsilon=0.1)
     
     for _ in range(100):
         agent.getNextAction()
     
     plt.figure(figsize=(10, 6))
-    plt.plot(agent.cumul_regret, label="UCB Agent")
+    plt.plot(agent.cumul_regret, label="Greedy Agent (ε=0.1)")
     plt.xlabel("Plays", fontsize=14)
     plt.ylabel("Cumulative regret", fontsize=14)
     plt.xticks(fontsize=14)
     plt.yticks(fontsize=14)
     plt.legend(fontsize=14)
-    plt.title("Cumulative Regret of UCB Agent", fontsize=20)
-    from pathlib import Path
-    base_dir = Path(__file__).resolve().parent.parent
-    out_file = base_dir / "figs" / "UCB_cumul_regret.png"
-    out_file.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(out_file)
+    plt.title("Cumulative Regret of Greedy Agent", fontsize=20)
+    plt.savefig("Greedy_cumul_regret.png")
     plt.show()
 
 
