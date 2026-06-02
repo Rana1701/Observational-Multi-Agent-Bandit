@@ -2,7 +2,7 @@ import numpy as np
 import random
 
 class Greedy():
-    '''Greedy that mimics the target's most frequent action.'''
+    '''Greedy agent that always exploits the best estimated value.'''
     
     def __init__(self, reward_fn=None, delta=0.2):
         self.reward_fn = reward_fn if reward_fn is not None else self._default_reward_fn
