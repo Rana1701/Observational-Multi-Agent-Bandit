@@ -1,10 +1,12 @@
 import json
+import numpy as np
 import random
-from vllm import LLM
-from utils.reward_function import reward_fn
+from vllm import LLM 
 
 class LLMAgent:
-    def __init__(self, name_parameter="Qwen/Qwen2.5-7B-Instruct", model=None):
+    def __init__(self, name_parameter="Qwen/Qwen2.5-7B-Instruct", model=None, reward_fn=None):
+        self.reward_fn = reward_fn if reward_fn is not None else self._default_reward_fn
+
         self.model = model if model is not None else self.charging_model(name_parameter)
         self.target = {}
         self.history = ""
@@ -12,7 +14,6 @@ class LLMAgent:
         self.cumul_regret = []
         self.t = 0
         self.delta = 0.2
-        self.reward_fn = reward_fn()
 
     def ask(self, prompt):
         if self.model is None:
@@ -84,6 +85,15 @@ class LLMAgent:
         except Exception:
             return None
 
+    def _default_reward_fn(self, arm_played):
+        win_rate = [0.6, 0.4]
+        pull = np.random.rand()
+        if arm_played == 0 and pull < win_rate[0]:
+            return 1
+        elif arm_played == 1 and pull < win_rate[1]:
+            return 1
+        return 0
+
     def getReward(self, arm_played):
         return self.reward_fn(arm_played)
 
@@ -91,17 +101,12 @@ class LLMAgent:
 def main():
     import matplotlib.pyplot as plt
     
-    # Test vllm simple
-    print("Testing vLLM...")
     llm = LLM(model="Qwen/Qwen2.5-7B-Instruct")
-    outputs = llm.generate(["The capital of France is"])
-    text = outputs[0].outputs[0].text
-    print(f"vLLM output: {text}")
     
-    '''Runs a LLM agent for 10 plays'''
+    '''Runs a LLM agent for 100 plays'''
     agent = LLMAgent(model=llm)  
     
-    for _ in range(10):
+    for _ in range(100):
         agent.getNextAction()
     
     plt.figure(figsize=(10, 6))
