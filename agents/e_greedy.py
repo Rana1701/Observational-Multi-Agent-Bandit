@@ -67,14 +67,25 @@ class E_Greedy():
 def main():
     import matplotlib.pyplot as plt
     
-    '''Runs an epsilon Greedy agent for 100 plays'''
-    agent = E_Greedy(epsilon=0.1)
-    
-    for _ in range(100):
-        agent.getNextAction()
-    
+    nb_runs = 100
+    nb_episodes = 1000
+    epsilons = [0.1, 0.5, 0.01]
+    results = {}
+
+    '''Runs epsilon-greedy agents for 1000 episodes, averaged over 10 runs.'''
+
+    for eps in epsilons:
+        cumul_regrets = []
+        for _ in range(nb_runs):
+            agent = E_Greedy(epsilon=eps)
+            for _ in range(nb_episodes):
+                agent.getNextAction()
+            cumul_regrets.append(agent.cumul_regret)
+        results[eps] = np.mean(cumul_regrets, axis=0)
+        
     plt.figure(figsize=(10, 6))
-    plt.plot(agent.cumul_regret, label="Epsilon-Greedy Agent (ε=0.1)")
+    for eps, mean_cumul_regret in results.items():
+        plt.plot(mean_cumul_regret, label=f"Epsilon-Greedy Agent (ε={eps})")
     plt.xlabel("Plays", fontsize=14)
     plt.ylabel("Cumulative regret", fontsize=14)
     plt.xticks(fontsize=14)
