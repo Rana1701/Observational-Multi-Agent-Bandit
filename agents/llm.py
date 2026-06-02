@@ -6,6 +6,7 @@ from vllm import LLM
 class LLMAgent:
     def __init__(self, name_parameter="Qwen/Qwen2.5-7B-Instruct", model=None, reward_fn=None):
         self.reward_fn = reward_fn if reward_fn is not None else self._default_reward_fn
+
         self.model = model if model is not None else self.charging_model(name_parameter)
         self.target = {}
         self.history = ""

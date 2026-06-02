@@ -1,5 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import os
+import sys
+
+# ensure project root is on sys.path so sibling packages (agents, utils) can be imported
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # use the classes defined in your modules
 from agents.ucb import UCB as UCBAgent
@@ -79,7 +84,7 @@ def main():
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig('Figure1_experiment_combined.png', dpi=150)
+    plt.savefig('experiments/Figure1_experiment_combined.png', dpi=150)
     print(f"Figure saved as 'Figure1_experiment_combined.png'")
     plt.show()
 
