@@ -1,93 +1,178 @@
-import numpy as np
-import matplotlib.pyplot as plt
+import json
 import os
 import sys
-
-# ensure project root is on sys.path so sibling packages (agents, utils) can be imported
+import numpy as np
+import random
+from vllm import LLM
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# use the classes defined in your modules
-from agents.ucb import UCB as UCBAgent
-from agents.greedy import Greedy as GreedyAgent
-from agents.tucb import TUCB as TUCBAgent
-from utils.reward_function import reward_fn
+from utils.prompt_builder import build_prompt 
+from agents.llm import LLMAgent
+
+class LLMAgent1:
+    def __init__(self, name_parameter="Qwen/Qwen2.5-7B-Instruct", model=None, reward_fn=None):
+        self.reward_fn = reward_fn if reward_fn is not None else self._default_reward_fn
+
+        self.model = model if model is not None else self.charging_model(name_parameter)
+        self.target = {}
+        self.history = {"0": {"pulls": 0, "reward": 0}, "1": {"pulls": 0, "reward": 0}}
+        self.default_prompt = (
+                "You are a multi-armed bandit agent. You have 2 arms to choose from."
+                " Each arm has a certain probability of giving a reward."
+                " Your goal is to maximize your cumulative reward over time."
+                " At each time step, you can observe the previous actions of the other agents,"
+                " but not their rewards."
+                " Based on the actions of the other agents and your own experience,"
+                " you need to decide which arm to pull next."
+                "Please answer in the following JSON format: "
+                "{\"action\": 0 or 1, \"explication\": \"Your explanation here\"}"
+            )
+
+        self.cumul_regret = []
+        self.t = 0
+        self.delta = 0.2
+
+    def ask(self, prompt):
+        if self.model is None:
+            print("Model loading failed. Using fallback action.")
+            return {"action": random.choice([0, 1]), "explication": "no model loaded - fallback action"}
+
+        try:
+            result = self.model.generate([prompt], max_new_tokens=64)
+            response = result[0].outputs[0].text
+        except Exception:
+            return {"action": random.choice([0, 1]), "explication": "model generation failed"}
+
+        json_start = response.find('{')
+        if json_start != -1:
+            response = response[json_start:]
+
+        try:
+            return json.loads(response)
+        except json.JSONDecodeError:
+            return {"action": random.choice([0, 1]), "explication": "default fallback action"}
+
+    def getNextAction(self, prompt=None):
+        if prompt is None:
+            prompt = self.default_prompt
+        
+        self.t += 1
+
+        try:
+            response = self.ask(prompt)
+        except Exception:
+            response = {"action": 0, "explication": "default fallback action"}
+
+        action = response.get('action', 0)
+        step_reward = self.getReward(action)
+
+        self.history[str(action)]["pulls"] += 1
+        self.history[str(action)]["reward"] += step_reward
+
+        if action == 0:
+            step_regret = 0
+        else:
+            step_regret = self.delta
+
+        if self.t > 1:
+            self.cumul_regret.append(self.cumul_regret[-1] + step_regret)
+        else:
+            self.cumul_regret.append(step_regret)
+
+        return action
 
 
-def run_experiment(num_episodes=1000, num_runs=10, rate0=0.6, rate1=0.4):
-    '''Run the experiment using the classes from your modules.'''
+    def charging_model(self, name_parameter="Qwen/Qwen2.5-7B-Instruct"):
+        try:
+            return LLM(model=name_parameter)
+        except Exception:
+            return None
 
-    target_regrets = []
-    greedy_regrets = []
-    target_ucb_regrets = []
+    def _default_reward_fn(self, arm_played):
+        win_rate = [0.6, 0.4]
+        pull = np.random.rand()
+        if arm_played == 0 and pull < win_rate[0]:
+            return 1
+        elif arm_played == 1 and pull < win_rate[1]:
+            return 1
+        return 0
 
-    for run in range(num_runs):
-        reward = reward_fn(rate0, rate1)
-        delta = rate0 - rate1
-
-        target = UCBAgent(reward_fn=reward, delta=delta)
-        greedy = GreedyAgent(reward_fn=reward, delta=delta)
-        target_ucb = TUCBAgent(1, reward_fn=reward, delta=delta)
-
-        for t in range(num_episodes):
-           
-            target_action = target.getNextAction()
-            greedy.getNextAction([target_action])
-
-            target_ucb.getNextAction([target_action])
-
-        target_regrets.append(target.cumul_regret)
-        greedy_regrets.append(greedy.cumul_regret)
-        target_ucb_regrets.append(target_ucb.cumul_regret)
-
-    # Average across runs
-    target_avg = np.mean(target_regrets, axis=0)
-    greedy_avg = np.mean(greedy_regrets, axis=0)
-    target_ucb_avg = np.mean(target_ucb_regrets, axis=0)
-
-    return target_avg, greedy_avg, target_ucb_avg
+    def getReward(self, arm_played):
+        return self.reward_fn(arm_played)
 
 
 def main():
-    '''Run a simple comparison using your existing classes.'''
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from pathlib import Path
+    from vllm import LLM
 
-    num_episodes = 1000
-    fig, ax = plt.subplots(figsize=(12, 8))
-    
-    deltas = []
-    colors_target = ['#1f77b4', '#1f77b4', '#1f77b4']
-    colors_greedy = ['#ff7f0e', '#ff7f0e', '#ff7f0e']
-    colors_tucb = ['#2ca02c', '#2ca02c', '#2ca02c']
-    linestyles = ['-', '--', ':']
-    
-    for idx, (a, b) in enumerate([(0.55, 0.45), (0.7, 0.3), (0.9, 0.1)]):
-        print(f"Running experiment using module classes with rates {a:.1f}/{b:.1f}...")
-        target_avg, greedy_avg, target_ucb_avg = run_experiment(
-            num_episodes=num_episodes, rate0=a, rate1=b
-        )
+    nb_runs = 20
+    nb_plays = 100
+    model_name = "Qwen/Qwen2.5-7B-Instruct"
+
+    regrets_default_runs = []
+    regrets_prompt_runs = []
+
+    llm = LLM(model=model_name)
+
+    for run in range(nb_runs):
+
         
-        delta = a - b
-        deltas.append(delta)
-        episodes = np.arange(num_episodes)
-        
-        ax.plot(episodes, target_avg, color=colors_target[idx], linestyle=linestyles[idx], 
-                linewidth=2, label=f'Target (Δ_a={delta:.1f})')
-        ax.plot(episodes, greedy_avg, color=colors_greedy[idx], linestyle=linestyles[idx], 
-                linewidth=2, label=f'Greedy (Δ_a={delta:.1f})')
-        ax.plot(episodes, target_ucb_avg, color=colors_tucb[idx], linestyle=linestyles[idx], 
-                linewidth=2, label=f'Target-UCB (Δ_a={delta:.1f})')
+        agent_default = LLMAgent(model=llm)
+        agent_prompt = LLMAgent1(model=llm)
 
-    ax.set_xlabel('Episodes', fontsize=14)
-    ax.set_ylabel('Cumulative regret', fontsize=14)
-    ax.tick_params(axis='both', labelsize=12)
-    ax.legend(fontsize=11, loc='upper left', ncol=3)
-    ax.set_title('Multi-Armed Bandit Algorithms with Different Δ_a Values', fontsize=14)
-    ax.grid(True, alpha=0.3)
+        for t in range(nb_plays):
 
-    plt.tight_layout()
-    plt.savefig('experiments/Figure1_experiment_combined.png', dpi=150)
-    print(f"Figure saved as 'Figure1_experiment_combined.png'")
+            # default
+            agent_default.getNextAction()
+
+            # prompt-based 
+            prompt = build_prompt(agent_prompt.t, agent_prompt.history)
+            agent_prompt.getNextAction(prompt)
+
+        regrets_default_runs.append(agent_default.cumul_regret)
+        regrets_prompt_runs.append(agent_prompt.cumul_regret)
+
+        print(f"Run {run + 1}/{nb_runs} completed")
+
+    regrets_default_runs = np.array(regrets_default_runs)
+    regrets_prompt_runs = np.array(regrets_prompt_runs)
+
+    mean_default = np.mean(regrets_default_runs, axis=0)
+    mean_prompt = np.mean(regrets_prompt_runs, axis=0)
+
+    std_default = np.std(regrets_default_runs, axis=0, ddof=1)
+    std_prompt = np.std(regrets_prompt_runs, axis=0, ddof=1)
+
+    ci_default = 1.96 * std_default / np.sqrt(nb_runs)
+    ci_prompt = 1.96 * std_prompt / np.sqrt(nb_runs)
+
+    x = np.arange(nb_plays)
+
+    plt.figure(figsize=(10, 6))
+
+    l1, = plt.plot(x, mean_default, label="Default Prompt")
+    plt.fill_between(x, mean_default - ci_default, mean_default + ci_default,
+                     alpha=0.2, color=l1.get_color())
+
+    l2, = plt.plot(x, mean_prompt, label="Summarized Prompt")
+    plt.fill_between(x, mean_prompt - ci_prompt, mean_prompt + ci_prompt,
+                     alpha=0.2, color=l2.get_color())
+
+    plt.xlabel("Plays")
+    plt.ylabel("Cumulative Regret")
+    plt.title(f"LLM Bandit Comparison ({nb_runs} runs)")
+    plt.legend()
+    plt.grid(alpha=0.3)
+
+    base_dir = Path(__file__).resolve().parent.parent
+    out_file = base_dir / "figs" / "LLM_comparison.png"
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+
+    plt.savefig(out_file)
     plt.show()
-
+    print(f"Figure saved as '{out_file}'")
 
 if __name__ == "__main__":
     main()
