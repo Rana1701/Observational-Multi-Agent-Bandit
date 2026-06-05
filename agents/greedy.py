@@ -2,7 +2,7 @@ import numpy as np
 import random
 
 class Greedy():
-    '''Greedy that mimics the target's most frequent action.'''
+    '''Greedy agent that always exploits the best estimated value.'''
     
     def __init__(self, reward_fn=None, delta=0.2):
         self.reward_fn = reward_fn if reward_fn is not None else self._default_reward_fn
@@ -24,12 +24,15 @@ class Greedy():
         self.t += 1
 
         # choose action: 
-        if self.values[0] > self.values[1]:
-            action = 0
-        elif self.values[1] > self.values[0]:
-            action = 1
+        if self.t < 2:  # play each arm at least once
+            action = self.t - 1
         else:
-            action = random.choice([0, 1])
+            if self.values[0] > self.values[1]:
+                action = 0
+            elif self.values[1] > self.values[0]:
+                action = 1
+            else:
+                action = random.choice([0, 1])
 
         # observe reward 
         reward = self.reward_fn(action)
