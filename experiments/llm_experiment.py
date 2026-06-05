@@ -1,92 +1,107 @@
-import numpy as np
-import matplotlib.pyplot as plt
 import os
 import sys
-
-# ensure project root is on sys.path so sibling packages (agents, utils) can be imported
+import numpy as np
+from vllm import LLM
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# use the classes defined in your modules
+from utils.prompt_builder import build_prompt , build_prompt2
+from agents.llm import LLMAgent
 from agents.ucb import UCB as UCBAgent
-from agents.greedy import Greedy as GreedyAgent
-from agents.tucb import TUCB as TUCBAgent
 from utils.reward_function import reward_fn
 
-
-def run_experiment(num_episodes=1000, num_runs=10, rate0=0.6, rate1=0.4):
-    '''Run the experiment using the classes from your modules.'''
-
-    target_regrets = []
-    greedy_regrets = []
-    target_ucb_regrets = []
-
-    for run in range(num_runs):
-        reward = reward_fn(rate0, rate1)
-        delta = rate0 - rate1
-
-        target = UCBAgent(reward_fn=reward, delta=delta)
-        greedy = GreedyAgent(reward_fn=reward, delta=delta)
-        target_ucb = TUCBAgent(1, reward_fn=reward, delta=delta)
-
-        for t in range(num_episodes):
-           
-            target_action = target.getNextAction()
-            greedy.getNextAction([target_action])
-
-            target_ucb.getNextAction([target_action])
-
-        target_regrets.append(target.cumul_regret)
-        greedy_regrets.append(greedy.cumul_regret)
-        target_ucb_regrets.append(target_ucb.cumul_regret)
-
-    # Average across runs
-    target_avg = np.mean(target_regrets, axis=0)
-    greedy_avg = np.mean(greedy_regrets, axis=0)
-    target_ucb_avg = np.mean(target_ucb_regrets, axis=0)
-
-    return target_avg, greedy_avg, target_ucb_avg
-
-
 def main():
-    '''Run a simple comparison using your existing classes.'''
+    import matplotlib.pyplot as plt
+    from pathlib import Path
 
-    num_episodes = 1000
-    fig, ax = plt.subplots(figsize=(12, 8))
-    
-    deltas = []
-    colors_target = ['#1f77b4', '#1f77b4', '#1f77b4']
-    colors_greedy = ['#ff7f0e', '#ff7f0e', '#ff7f0e']
-    colors_tucb = ['#2ca02c', '#2ca02c', '#2ca02c']
-    linestyles = ['-', '--', ':']
-    
-    for idx, (a, b) in enumerate([(0.55, 0.45), (0.7, 0.3), (0.9, 0.1)]):
-        print(f"Running experiment using module classes with rates {a:.1f}/{b:.1f}...")
-        target_avg, greedy_avg, target_ucb_avg = run_experiment(
-            num_episodes=num_episodes, rate0=a, rate1=b
-        )
-        
-        delta = a - b
-        deltas.append(delta)
-        episodes = np.arange(num_episodes)
-        
-        ax.plot(episodes, target_avg, color=colors_target[idx], linestyle=linestyles[idx], 
-                linewidth=2, label=f'Target (Δ_a={delta:.1f})')
-        ax.plot(episodes, greedy_avg, color=colors_greedy[idx], linestyle=linestyles[idx], 
-                linewidth=2, label=f'Greedy (Δ_a={delta:.1f})')
-        ax.plot(episodes, target_ucb_avg, color=colors_tucb[idx], linestyle=linestyles[idx], 
-                linewidth=2, label=f'Target-UCB (Δ_a={delta:.1f})')
+    other_actions = [0, 0]
+    nb_runs = 20
+    nb_plays = 1000
+    model_name = "Qwen/Qwen2.5-7B-Instruct"
 
-    ax.set_xlabel('Episodes', fontsize=14)
-    ax.set_ylabel('Cumulative regret', fontsize=14)
-    ax.tick_params(axis='both', labelsize=12)
-    ax.legend(fontsize=11, loc='upper left', ncol=3)
-    ax.set_title('Multi-Armed Bandit Algorithms with Different Δ_a Values', fontsize=14)
-    ax.grid(True, alpha=0.3)
+    regrets_history_runs = []
+    regrets_no_history_runs = []
+    regrets_ucb_runs = []
 
-    plt.tight_layout()
-    plt.savefig('experiments/Figure1_experiment_combined.png', dpi=150)
-    print(f"Figure saved as 'Figure1_experiment_combined.png'")
+    llm = LLM(model=model_name)
+
+    for run in range(nb_runs):
+
+        agent1 = LLMAgent(model=llm)
+        agent2 = LLMAgent(model=llm)
+        agent3 = UCBAgent(reward_fn=reward_fn())
+
+        for t in range(nb_plays):
+
+            # --- LLM avec historique ---
+            prompt1 = build_prompt(agent1.t, agent1.history, other_actions)
+            agent1.getNextAction(prompt1)
+
+            # --- LLM sans historique ---
+            prompt2 = build_prompt2(agent2.t)
+            agent2.getNextAction(prompt2)
+
+            # --- UCB ---
+            ucb_action = agent3.getNextAction()
+
+            # Mettre à jour les actions observées
+            other_actions[ucb_action] += 1
+
+        regrets_history_runs.append(agent1.cumul_regret)
+        regrets_no_history_runs.append(agent2.cumul_regret)
+        regrets_ucb_runs.append(agent3.cumul_regret)
+
+        print(f"Run {run + 1}/{nb_runs} completed")
+
+    # convert to numpy
+    regrets_history_runs = np.array(regrets_history_runs)
+    regrets_no_history_runs = np.array(regrets_no_history_runs)
+    regrets_ucb_runs = np.array(regrets_ucb_runs)
+
+    # means
+    mean_history = np.mean(regrets_history_runs, axis=0)
+    mean_no_history = np.mean(regrets_no_history_runs, axis=0)
+    mean_ucb = np.mean(regrets_ucb_runs, axis=0)
+
+    # std
+    std_history = np.std(regrets_history_runs, axis=0, ddof=1)
+    std_no_history = np.std(regrets_no_history_runs, axis=0, ddof=1)
+    std_ucb = np.std(regrets_ucb_runs, axis=0, ddof=1)
+
+    # CI 95%
+    ci_history = 1.96 * std_history / np.sqrt(nb_runs)
+    ci_no_history = 1.96 * std_no_history / np.sqrt(nb_runs)
+    ci_ucb = 1.96 * std_ucb / np.sqrt(nb_runs)
+
+    x = np.arange(nb_plays)
+
+    plt.figure(figsize=(10, 6))
+
+    l1, = plt.plot(x, mean_history, label="LLM + History")
+    plt.fill_between(x, mean_history - ci_history, mean_history + ci_history,
+                     alpha=0.2, color=l1.get_color())
+
+    l2, = plt.plot(x, mean_no_history, label="LLM No History")
+    plt.fill_between(x, mean_no_history - ci_no_history, mean_no_history + ci_no_history,
+                     alpha=0.2, color=l2.get_color())
+
+    l3, = plt.plot(x, mean_ucb, label="UCB")
+    plt.fill_between(x, mean_ucb - ci_ucb, mean_ucb + ci_ucb,
+                     alpha=0.2, color=l3.get_color())
+
+    plt.xlabel("Plays")
+    plt.ylabel("Cumulative Regret")
+    plt.title(f"Bandit Comparison ({nb_runs} runs)")
+    plt.legend()
+    plt.grid(alpha=0.3)
+
+    base_dir = Path(__file__).resolve().parent.parent
+    out_file = base_dir / "figs" / "bandit_comparison.png"
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+
+    plt.savefig(out_file)
     plt.show()
+
+    print(f"Figure saved as '{out_file}'")
 
 
 if __name__ == "__main__":
