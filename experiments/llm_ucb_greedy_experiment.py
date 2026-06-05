@@ -1,4 +1,8 @@
+import os
+import sys
 from vllm import LLM
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from agents.ucb import UCB as UCBAgent
 from agents.e_greedy import E_Greedy as GreedyAgent
@@ -45,19 +49,55 @@ def main():
     mean_greedy = np.mean(greedy_runs, axis=0)
     mean_llm = np.mean(llm_runs, axis=0)
 
-    plt.figure(figsize=(12, 8))
-    plt.plot(mean_ucb, label="UCB")
-    plt.plot(mean_greedy, label="Greedy")
-    plt.plot(mean_llm, label="LLM")
+    std_ucb = np.std(ucb_runs, axis=0, ddof=1)
+    std_greedy = np.std(greedy_runs, axis=0, ddof=1)
+    std_llm = np.std(llm_runs, axis=0, ddof=1)
 
-    plt.xlabel("Plays", fontsize=14)
+    ci_ucb = 1.96 * std_ucb / np.sqrt(nb_runs)
+    ci_greedy = 1.96 * std_greedy / np.sqrt(nb_runs)
+    ci_llm = 1.96 * std_llm / np.sqrt(nb_runs)
+
+    episodes = np.arange(nb_plays)
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    line_ucb, = ax.plot(episodes, mean_ucb, label="UCB", linewidth=2)
+    ax.fill_between(
+        episodes,
+        mean_ucb - ci_ucb,
+        mean_ucb + ci_ucb,
+        color=line_ucb.get_color(),
+        alpha=0.2,
+        linewidth=0,
+    )
+
+    line_greedy, = ax.plot(episodes, mean_greedy, label="Greedy", linewidth=2)
+    ax.fill_between(
+        episodes,
+        mean_greedy - ci_greedy,
+        mean_greedy + ci_greedy,
+        color=line_greedy.get_color(),
+        alpha=0.2,
+        linewidth=0,
+    )
+
+    line_llm, = ax.plot(episodes, mean_llm, label="LLM", linewidth=2)
+    ax.fill_between(
+        episodes,
+        mean_llm - ci_llm,
+        mean_llm + ci_llm,
+        color=line_llm.get_color(),
+        alpha=0.2,
+        linewidth=0,
+    )
+
+    ax.set_xlabel("Plays", fontsize=14)
     plt.ylabel("Cumulative regret", fontsize=14)
     plt.xticks(fontsize=14)
     plt.yticks(fontsize=14)
     plt.legend(fontsize=14)
     plt.title("Average Cumulative Regret of 3 Agents over 10 runs", fontsize=20)
-
-    out_file = Path(__file__).resolve().parent / "figs" / "Agents_cumul_regret.png"
+    base_dir = Path(__file__).resolve().parent.parent
+    out_file = base_dir / "figs" / "Agents_cumul_regret.png"
     out_file.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(out_file)
     print(f"Figure saved as '{out_file}'")
