@@ -3,14 +3,26 @@ import numpy as np
 import random
 from vllm import LLM 
 
+
 class LLMAgent:
     def __init__(self, name_parameter="Qwen/Qwen2.5-7B-Instruct", model=None, reward_fn=None):
         self.reward_fn = reward_fn if reward_fn is not None else self._default_reward_fn
 
         self.model = model if model is not None else self.charging_model(name_parameter)
         self.target = {}
-        self.history = ""
-        self.default_prompt = ""
+        self.history = {"0": {"pulls": 0, "reward": 0}, "1": {"pulls": 0, "reward": 0}}
+        self.default_prompt = (
+                "You are a multi-armed bandit agent. You have 2 arms to choose from."
+                " Each arm has a certain probability of giving a reward."
+                " Your goal is to maximize your cumulative reward over time."
+                " At each time step, you can observe the previous actions of the other agents,"
+                " but not their rewards."
+                " Based on the actions of the other agents and your own experience,"
+                " you need to decide which arm to pull next."
+                "Please answer in the following JSON format: "
+                "{\"action\": 0 or 1, \"explication\": \"Your explanation here\"}"
+            )
+
         self.cumul_regret = []
         self.t = 0
         self.delta = 0.2
@@ -21,7 +33,7 @@ class LLMAgent:
             return {"action": random.choice([0, 1]), "explication": "no model loaded - fallback action"}
 
         try:
-            result = self.model.generate([prompt], max_new_tokens=64)
+            result = self.model.generate([prompt], max_new_tokens=64, temperature=0.7)
             response = result[0].outputs[0].text
         except Exception:
             return {"action": random.choice([0, 1]), "explication": "model generation failed"}
@@ -35,25 +47,11 @@ class LLMAgent:
         except json.JSONDecodeError:
             return {"action": random.choice([0, 1]), "explication": "default fallback action"}
 
-    def getNextAction(self):
+    def getNextAction(self, prompt=None):
+        if prompt is None:
+            prompt = self.default_prompt
+        
         self.t += 1
-
-        if self.t == 1:
-            self.default_prompt = (
-                "You are a multi-armed bandit agent. You have 2 arms to choose from."
-                " Each arm has a certain probability of giving a reward."
-                " Your goal is to maximize your cumulative reward over time."
-                " At each time step, you can observe the previous actions of the other agents,"
-                " but not their rewards."
-                " Based on the actions of the other agents and your own experience,"
-                " you need to decide which arm to pull next."
-                "Please answer in the following JSON format: "
-                "{\"action\": 0, \"explication\": \"Your explanation here\"}"
-            )
-
-        prompt = self.default_prompt + f" Your history of actions and rewards is as follows:\n{self.history}\n"
-        prompt += "Based on this history, and the previous actions of the other agents, which arm should you pull next? "
-
 
         try:
             response = self.ask(prompt)
@@ -62,7 +60,9 @@ class LLMAgent:
 
         action = response.get('action', 0)
         step_reward = self.getReward(action)
-        self.history += f"Action: {action}, Reward: {step_reward}\n"
+
+        self.history[str(action)]["pulls"] += 1
+        self.history[str(action)]["reward"] += step_reward
 
         if action == 0:
             step_regret = 0
@@ -76,8 +76,6 @@ class LLMAgent:
 
         return action
 
-    def update_history(self, model, action):
-        self.history += f"{model} - Action: {action}\n"
 
     def charging_model(self, name_parameter="Qwen/Qwen2.5-7B-Instruct"):
         try:
@@ -96,6 +94,7 @@ class LLMAgent:
 
     def getReward(self, arm_played):
         return self.reward_fn(arm_played)
+
 
         
 def main():
