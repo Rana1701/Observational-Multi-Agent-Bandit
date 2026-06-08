@@ -97,7 +97,7 @@ def main():
     plt.legend(fontsize=14)
     plt.title("Average Cumulative Regret of 3 Agents over 10 runs", fontsize=20)
     base_dir = Path(__file__).resolve().parent.parent
-    out_file = base_dir / "figs" / "Agents_cumul_regret.png"
+    out_file = base_dir / "figs" / "LLM vs UCB vs Greedy.png"
     out_file.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(out_file)
     print(f"Figure saved as '{out_file}'")
