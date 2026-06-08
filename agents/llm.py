@@ -2,12 +2,15 @@ import json
 import numpy as np
 import random
 from vllm import LLM 
+from vllm import SamplingParams 
 
 
 class LLMAgent:
     def __init__(self, name_parameter="Qwen/Qwen2.5-7B-Instruct", model=None, reward_fn=None):
         self.reward_fn = reward_fn if reward_fn is not None else self._default_reward_fn
-
+        
+        self.error = 0 # count parsing errors
+        self.explanation = ""
         self.model = model if model is not None else self.charging_model(name_parameter)
         self.target = {}
         self.history = {"0": {"pulls": 0, "reward": 0}, "1": {"pulls": 0, "reward": 0}}
@@ -20,7 +23,11 @@ class LLMAgent:
                 " Based on the actions of the other agents and your own experience,"
                 " you need to decide which arm to pull next."
                 "Please answer in the following JSON format: "
-                "{\"action\": 0 or 1, \"explication\": \"Your explanation here\"}"
+                "{\"action\": 0 or 1, \"explanation\": \"Your explanation here\"}"
+                "Return ONLY one valid JSON object."
+                "Do not output multiple JSON objects."
+                "Do not use markdown."
+                "Do not write any text before or after."
             )
 
         self.cumul_regret = []
@@ -30,22 +37,36 @@ class LLMAgent:
     def ask(self, prompt):
         if self.model is None:
             print("Model loading failed. Using fallback action.")
-            return {"action": random.choice([0, 1]), "explication": "no model loaded - fallback action"}
+            return {"action": random.choice([0, 1]), "explanation": "no model loaded - fallback action"}
 
         try:
-            result = self.model.generate([prompt], max_new_tokens=64, temperature=0.7)
+            sampling_params = SamplingParams(
+                temperature=0.7,
+                max_tokens=64
+            )
+
+            result = self.model.generate(
+                [prompt],
+                sampling_params
+            )
+
             response = result[0].outputs[0].text
-        except Exception:
-            return {"action": random.choice([0, 1]), "explication": "model generation failed"}
 
-        json_start = response.find('{')
-        if json_start != -1:
-            response = response[json_start:]
+            #print("RAW RESPONSE:")
+            #print(response)
+
+        except Exception as e:
+            print("GENERATION ERROR:", repr(e))
+            return {"action": random.choice([0, 1]), "explanation": "model generation failed"}
 
         try:
-            return json.loads(response)
-        except json.JSONDecodeError:
-            return {"action": random.choice([0, 1]), "explication": "default fallback action"}
+            return self.extract_json(response)
+        except:
+            self.error += 1
+            return {
+                "action": random.choice([0, 1]),
+                "explanation": "parse failed"
+            }
 
     def getNextAction(self, prompt=None):
         if prompt is None:
@@ -56,9 +77,10 @@ class LLMAgent:
         try:
             response = self.ask(prompt)
         except Exception:
-            response = {"action": 0, "explication": "default fallback action"}
+            response = {"action": 0, "explanation": "default fallback action"}
 
         action = response.get('action', 0)
+        self.explanation = response.get('explanation', '')
         step_reward = self.getReward(action)
 
         self.history[str(action)]["pulls"] += 1
@@ -76,6 +98,49 @@ class LLMAgent:
 
         return action
 
+    def extract_json(self, response):
+        import json
+        import re
+
+  
+        # 1. EXTRAIRE ACTION (JSON)
+        start = response.find("{")
+        action = None
+
+        if start != -1:
+            depth = 0
+            for i in range(start, len(response)):
+                if response[i] == "{":
+                    depth += 1
+                elif response[i] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        try:
+                            obj = json.loads(response[start:i+1])
+                            if "action" in obj:
+                                action = obj.get("action")
+                                break
+                        except:
+                            pass
+
+        if action is None:
+            action = random.choice([0, 1])
+
+   
+        # 2. EXTRAIRE EXPLICATION (TEXT HEURISTIC)
+        exp = ""
+
+        match = re.search(r"(explication|explanation)\s*:\s*(.*)", response, re.IGNORECASE | re.DOTALL)
+
+        if match:
+            exp = match.group(2).strip()
+        else:
+            exp = "no explanation found"
+
+        return {
+            "action": action,
+            "explication": exp
+        }
 
     def charging_model(self, name_parameter="Qwen/Qwen2.5-7B-Instruct"):
         try:
@@ -107,7 +172,8 @@ def main():
     
     for _ in range(100):
         agent.getNextAction()
-    
+    print (f"Total parsing errors: {agent.error}")
+
     plt.figure(figsize=(10, 6))
     plt.plot(agent.cumul_regret, label="LLM Agent ")
     plt.xlabel("Plays", fontsize=14)
