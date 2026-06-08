@@ -4,7 +4,7 @@ import numpy as np
 from vllm import LLM
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from utils.prompt_builder import build_prompt , build_prompt2
+from utils.prompt_builder import build_prompt , build_prompt2, build_prompt_ucb
 from agents.llm import LLMAgent
 from agents.ucb import UCB as UCBAgent
 from utils.reward_function import reward_fn
@@ -19,7 +19,7 @@ def main():
     model_name = "Qwen/Qwen2.5-7B-Instruct"
 
     regrets_history_runs = []
-    regrets_no_history_runs = []
+    regrets_ucb_llm_runs = []
     regrets_ucb_runs = []
 
     llm = LLM(model=model_name)
@@ -36,8 +36,8 @@ def main():
             prompt1 = build_prompt(agent1.t, agent1.history, other_actions)
             agent1.getNextAction(prompt1)
 
-            # --- LLM sans historique ---
-            prompt2 = build_prompt2(agent2.t)
+            # --- LLM imitant ucb  ---
+            prompt2 = build_prompt_ucb(agent2.t)
             agent2.getNextAction(prompt2)
 
             # --- UCB ---
@@ -47,29 +47,29 @@ def main():
             other_actions[ucb_action] += 1
 
         regrets_history_runs.append(agent1.cumul_regret)
-        regrets_no_history_runs.append(agent2.cumul_regret)
+        regrets_ucb_llm_runs.append(agent2.cumul_regret)
         regrets_ucb_runs.append(agent3.cumul_regret)
 
         print(f"Run {run + 1}/{nb_runs} completed")
 
     # convert to numpy
     regrets_history_runs = np.array(regrets_history_runs)
-    regrets_no_history_runs = np.array(regrets_no_history_runs)
+    regrets_ucb_llm_runs = np.array(regrets_ucb_llm_runs)
     regrets_ucb_runs = np.array(regrets_ucb_runs)
 
     # means
     mean_history = np.mean(regrets_history_runs, axis=0)
-    mean_no_history = np.mean(regrets_no_history_runs, axis=0)
+    mean_ucb_llm = np.mean(regrets_ucb_llm_runs, axis=0)
     mean_ucb = np.mean(regrets_ucb_runs, axis=0)
 
     # std
     std_history = np.std(regrets_history_runs, axis=0, ddof=1)
-    std_no_history = np.std(regrets_no_history_runs, axis=0, ddof=1)
+    std_ucb_llm = np.std(regrets_ucb_llm_runs, axis=0, ddof=1)
     std_ucb = np.std(regrets_ucb_runs, axis=0, ddof=1)
 
     # CI 95%
     ci_history = 1.96 * std_history / np.sqrt(nb_runs)
-    ci_no_history = 1.96 * std_no_history / np.sqrt(nb_runs)
+    ci_ucb_llm = 1.96 * std_ucb_llm / np.sqrt(nb_runs)
     ci_ucb = 1.96 * std_ucb / np.sqrt(nb_runs)
 
     x = np.arange(nb_plays)
@@ -80,8 +80,8 @@ def main():
     plt.fill_between(x, mean_history - ci_history, mean_history + ci_history,
                      alpha=0.2, color=l1.get_color())
 
-    l2, = plt.plot(x, mean_no_history, label="LLM No History")
-    plt.fill_between(x, mean_no_history - ci_no_history, mean_no_history + ci_no_history,
+    l2, = plt.plot(x, mean_ucb_llm, label="LLM imitating UCB")
+    plt.fill_between(x, mean_ucb_llm - ci_ucb_llm, mean_ucb_llm + ci_ucb_llm,
                      alpha=0.2, color=l2.get_color())
 
     l3, = plt.plot(x, mean_ucb, label="UCB")
@@ -95,7 +95,7 @@ def main():
     plt.grid(alpha=0.3)
 
     base_dir = Path(__file__).resolve().parent.parent
-    out_file = base_dir / "figs" / "bandit_comparison.png"
+    out_file = base_dir / "figs" / "LLM_UCB_imitation.png"
     out_file.parent.mkdir(parents=True, exist_ok=True)
 
     plt.savefig(out_file)

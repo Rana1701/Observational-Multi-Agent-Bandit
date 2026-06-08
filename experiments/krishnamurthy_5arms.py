@@ -222,14 +222,14 @@ def main():
 
     ax.set_xlabel("Plays", fontsize=14)
     ax.set_ylabel("Cumulative regret", fontsize=14)
-    ax.set_title("Figure 1-style: Mean Cumulative Regret + 95% CI", fontsize=18)
+    ax.set_title("Mean Cumulative Regret + 95% CI", fontsize=18)
     ax.tick_params(axis='both', labelsize=12)
     ax.legend(fontsize=12)
     ax.grid(True, alpha=0.3)
 
     out_dir = os.path.join(os.path.dirname(__file__), "figs")
     os.makedirs(out_dir, exist_ok=True)
-    out_file = os.path.join(out_dir, "figure1_regret_ci.png")
+    out_file = os.path.join(out_dir, "Krishnamurthy_5arms.png")
     plt.savefig(out_file, bbox_inches="tight", dpi=150)
     print(f"Figure saved as '{out_file}'")
 
