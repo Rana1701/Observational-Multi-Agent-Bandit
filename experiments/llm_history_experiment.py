@@ -13,9 +13,8 @@ def main():
     import matplotlib.pyplot as plt
     from pathlib import Path
 
-    other_actions = [0, 0]
     nb_runs = 20
-    nb_plays = 1000
+    nb_plays = 100
     model_name = "Qwen/Qwen2.5-7B-Instruct"
 
     regrets_history_runs = []
@@ -26,6 +25,8 @@ def main():
 
     for run in range(nb_runs):
 
+        other_actions = [0, 0]
+        
         agent1 = LLMAgent(model=llm)
         agent2 = LLMAgent(model=llm)
         agent3 = UCBAgent(reward_fn=reward_fn())
