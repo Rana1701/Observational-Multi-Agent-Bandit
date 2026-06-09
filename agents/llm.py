@@ -42,7 +42,7 @@ class LLMAgent:
         try:
             sampling_params = SamplingParams(
                 temperature=0.7,
-                max_tokens=64
+                max_tokens=32
             )
 
             result = self.model.generate(
@@ -170,8 +170,17 @@ def main():
     '''Runs a LLM agent for 100 plays'''
     agent = LLMAgent(model=llm)  
     
+    import time
+
+    t0 = time.perf_counter()
+
     for _ in range(100):
         agent.getNextAction()
+
+    t1 = time.perf_counter()
+
+    print(f"TOTAL TIME: {t1 - t0:.3f}s")
+    print(f"AVG TIME / STEP: {(t1 - t0)/100:.3f}s")
     print (f"Total parsing errors: {agent.error}")
 
     plt.figure(figsize=(10, 6))
