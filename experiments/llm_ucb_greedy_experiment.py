@@ -18,7 +18,7 @@ def main():
     from pathlib import Path
 
     nb_runs = 10
-    nb_plays = 1000
+    nb_plays = 100
     delta = 0.6 - 0.4
 
     ucb_runs = []
@@ -34,12 +34,14 @@ def main():
         greedy = GreedyAgent(reward_fn=reward, delta=delta)
         llm = LLMAgent(model=llm)
 
+        other_actions = [0, 0]
+
         for t in range(nb_plays):
             ucb_action = ucb.getNextAction()
             greedy_action = greedy.getNextAction()
             llm_action = llm.getNextAction()
-            llm.update_history("ucb", ucb_action)
-            llm.update_history("greedy", greedy_action)
+            other_actions[ucb_action] += 1
+            other_actions[greedy_action] += 1
 
         ucb_runs.append(ucb.cumul_regret)
         greedy_runs.append(greedy.cumul_regret)
