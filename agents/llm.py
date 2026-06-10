@@ -1,21 +1,28 @@
 import json
+import os
+import sys
 import numpy as np
 import random
 from vllm import LLM 
 from vllm import SamplingParams 
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from environnement.bernoulli_bandit import BernoulliBandit
+ 
 
 class LLMAgent:
-    def __init__(self, name_parameter="Qwen/Qwen2.5-7B-Instruct", model=None, reward_fn=None):
-        self.reward_fn = reward_fn if reward_fn is not None else self._default_reward_fn
-        
+    def __init__(self,bandit,  name_parameter="Qwen/Qwen2.5-7B-Instruct", model=None):
+
+        self.bandit = bandit
         self.error = 0 # count parsing errors
         self.explanation = ""
         self.model = model if model is not None else self.charging_model(name_parameter)
         self.target = {}
-        self.history = {"0": {"pulls": 0, "reward": 0}, "1": {"pulls": 0, "reward": 0}}
+        self.history = {str(i): {"pulls": 0, "reward": 0} for i in range(self.bandit.n_arms)}
+
         self.default_prompt = (
-                "You are a multi-armed bandit agent. You have 2 arms to choose from."
+                f"You are a multi-armed bandit agent. You have {self.bandit.n_arms} arms to choose from."
                 " Each arm has a certain probability of giving a reward."
                 " Your goal is to maximize your cumulative reward over time."
                 " At each time step, you can observe the previous actions of the other agents,"
@@ -23,7 +30,7 @@ class LLMAgent:
                 " Based on the actions of the other agents and your own experience,"
                 " you need to decide which arm to pull next."
                 "Please answer in the following JSON format: "
-                "{\"action\": 0 or 1, \"explanation\": \"Your explanation here\"}"
+                "{\"action\": integer in [0, K-1] \"explanation\": \"Your explanation here\"}"
                 "Return ONLY one valid JSON object."
                 "Do not output multiple JSON objects."
                 "Do not use markdown."
@@ -32,12 +39,11 @@ class LLMAgent:
 
         self.cumul_regret = []
         self.t = 0
-        self.delta = 0.2
 
     def ask(self, prompt):
         if self.model is None:
             print("Model loading failed. Using fallback action.")
-            return {"action": random.choice([0, 1]), "explanation": "no model loaded - fallback action"}
+            return {"action": 0, "explanation": "no model loaded - fallback action"}
 
         try:
             sampling_params = SamplingParams(
@@ -57,14 +63,14 @@ class LLMAgent:
 
         except Exception as e:
             print("GENERATION ERROR:", repr(e))
-            return {"action": random.choice([0, 1]), "explanation": "model generation failed"}
+            return {"action": 0, "explanation": "model generation failed"}
 
         try:
             return self.extract_json(response)
         except:
             self.error += 1
             return {
-                "action": random.choice([0, 1]),
+                "action": 0,
                 "explanation": "parse failed"
             }
 
@@ -86,10 +92,7 @@ class LLMAgent:
         self.history[str(action)]["pulls"] += 1
         self.history[str(action)]["reward"] += step_reward
 
-        if action == 0:
-            step_regret = 0
-        else:
-            step_regret = self.delta
+        step_regret = self.bandit.regret(action)
 
         if self.t > 1:
             self.cumul_regret.append(self.cumul_regret[-1] + step_regret)
@@ -124,13 +127,13 @@ class LLMAgent:
                             pass
 
         if action is None:
-            action = random.choice([0, 1])
+            action = 0
 
    
-        # 2. EXTRAIRE EXPLICATION (TEXT HEURISTIC)
+        # 2. extract explanation
         exp = ""
 
-        match = re.search(r"(explication|explanation)\s*:\s*(.*)", response, re.IGNORECASE | re.DOTALL)
+        match = re.search(r"(explanation)\s*:\s*(.*)", response, re.IGNORECASE | re.DOTALL)
 
         if match:
             exp = match.group(2).strip()
@@ -139,7 +142,7 @@ class LLMAgent:
 
         return {
             "action": action,
-            "explication": exp
+            "explanation": exp
         }
 
     def charging_model(self, name_parameter="Qwen/Qwen2.5-7B-Instruct"):
@@ -148,17 +151,9 @@ class LLMAgent:
         except Exception:
             return None
 
-    def _default_reward_fn(self, arm_played):
-        win_rate = [0.6, 0.4]
-        pull = np.random.rand()
-        if arm_played == 0 and pull < win_rate[0]:
-            return 1
-        elif arm_played == 1 and pull < win_rate[1]:
-            return 1
-        return 0
 
     def getReward(self, arm_played):
-        return self.reward_fn(arm_played)
+        return self.bandit.pull(arm_played)
 
 
         
@@ -168,7 +163,7 @@ def main():
     llm = LLM(model="Qwen/Qwen2.5-7B-Instruct")
     
     '''Runs a LLM agent for 100 plays'''
-    agent = LLMAgent(model=llm)  
+    agent = LLMAgent(BernoulliBandit(n_arms=2, best_mean=0.5, delta=0.2), model=llm)  
     
     import time
 
