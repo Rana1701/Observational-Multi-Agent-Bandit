@@ -1,0 +1,12 @@
+# Main experiment configuration.
+# Run with: python scripts/run_results.py
+
+experiment: two_arm_agents
+agents: [ucb, greedy, e_greedy]
+runs: 10
+plays: 1000
+
+rate0: 0.6
+rate1: 0.4
+epsilon: 0.1
+seed: 0
