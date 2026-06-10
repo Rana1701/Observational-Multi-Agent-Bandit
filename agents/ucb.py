@@ -54,13 +54,11 @@ class UCB():
             self.nb_plays[0] += 1
             self.avg_reward[0] += (step_reward - self.avg_reward[0]) / self.nb_plays[0]
             
-            #no added regret since arm 0 is optimal
             step_regret = 0
         elif action == 1:
             self.nb_plays[1] += 1
             self.avg_reward[1] += (step_reward - self.avg_reward[1]) / self.nb_plays[1]
             
-            #add regret according to the expected gap
             step_regret = self.delta
         
         if self.t > 1:
