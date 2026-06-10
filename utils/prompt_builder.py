@@ -43,7 +43,7 @@ Arm 1:
 - Pulled {arm_stats["1"]["pulls"]} times
 - Average reward: {arm_stats["1"]["reward"] / arm_stats["1"]["pulls"] if arm_stats["1"]["pulls"] > 0 else 0:.3f}
 
-Observed actions of other agent :
+Observed actions of other agent(s) :
 
 - Arm 0 selected {other_actions[0]} times
 - Arm 1 selected {other_actions[1]} times
@@ -59,7 +59,6 @@ Return ONLY ONE JSON object with keys:
 Do not add any text before or after.
 Do not use markdown.
 """
-
 
 # Prompt without history
 def build_prompt2(nb_plays):
@@ -184,7 +183,6 @@ Return ONLY ONE JSON object with keys:
 Do not add any text before or after.
 Do not use markdown.
 """
-
 
 def build_prompt_ucb_history(nb_plays, arm_stats):
 

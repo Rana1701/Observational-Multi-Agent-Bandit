@@ -22,6 +22,10 @@ def main():
     regrets_ucb_runs = []
 
     llm = LLM(model=model_name)
+    
+    import time
+
+    t0 = time.perf_counter()
 
     for run in range(nb_runs):
 
@@ -52,6 +56,12 @@ def main():
         regrets_ucb_runs.append(agent3.cumul_regret)
 
         print(f"Run {run + 1}/{nb_runs} completed")
+
+    t1 = time.perf_counter()
+
+    print(f"TOTAL TIME: {t1 - t0:.3f}s")
+    print(f"AVG TIME / STEP: {(t1 - t0)/100:.3f}s")
+    print (f"Total parsing errors: {agent1.error}")
 
     # convert to numpy
     regrets_history_runs = np.array(regrets_history_runs)
