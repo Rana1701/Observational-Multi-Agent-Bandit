@@ -1,111 +1,81 @@
 # experiments/run.py
 
 import argparse
-from pathlib import Path
-
+import os
+import sys
 import numpy as np
-import yaml
 
-from environnement.bernoulli_bandit import BernoulliBandit
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from agents.ucb import UCB
-from agents.tucb import TUCB
-from agents.greedy import Greedy
-from agents.e_greedy import EpsilonGreedy
-from agents.llm import LLMAgent
+from utils.common import (
+    create_agent,
+    load_config,
+    parallel_runs,
+    run_single_solo,
+    save_solo_results,
+    uses_llm,
+    AGENTS,
+    build_bandit,
+    run_seed,
+)
 
+def run_single_solo_with_llm(cfg, run_idx, shared_model):
+    exp = cfg["experiment"]
+    seed = run_seed(exp.get("seed"), run_idx)
+    bandit = build_bandit(cfg["environment"], seed)
 
-AGENTS = {
-    "UCB": UCB,
-    "TUCB": TUCB,
-    "Greedy": Greedy,
-    "EpsilonGreedy": EpsilonGreedy,
-    "LLM": LLMAgent,
-}
-
-
-def load_config(path):
-    with open(path, "r") as f:
-        return yaml.safe_load(f)
-
-
-def run_experiment(cfg):
-
-    runs = cfg["experiment"]["runs"]
-    horizon = cfg["experiment"]["horizon"]
-
-    all_regrets = []
-
-    for _ in range(runs):
-
-        bandit = BernoulliBandit(
-            **cfg["environment"]
-        )
-
-        agent_class = AGENTS[cfg["agent"]]
-
-        agent = agent_class(
-            bandit,
-            **cfg.get("agent_params", {})
-        )
-
-        for _ in range(horizon):
-            agent.getNextAction()
-
-        all_regrets.append(agent.cumul_regret)
-
-    return np.asarray(all_regrets)
-
-
-def save_results(regrets, cfg):
-
-    output_dir = Path(
-        cfg["experiment"].get(
-            "output_dir",
-            f"results/{cfg['agent'].lower()}"
-        )
+    agent = create_agent(
+        AGENTS[cfg["agent"]],
+        bandit,
+        cfg.get("agent_params"),
+        shared_model=shared_model,
     )
 
-    output_dir.mkdir(parents=True, exist_ok=True)
+    for _ in range(exp["horizon"]):
+        agent.getNextAction()
 
-    np.save(
-        output_dir / "regrets.npy",
-        regrets
-    )
-
-    np.save(
-        output_dir / "mean_regret.npy",
-        regrets.mean(axis=0)
-    )
-
-    np.save(
-        output_dir / "std_regret.npy",
-        regrets.std(axis=0)
-    )
-
-    with open(output_dir / "config.yaml", "w") as f:
-        yaml.safe_dump(cfg, f)
-
-    print(f"Results saved to {output_dir}")
+    return np.asarray(agent.cumul_regret, dtype=float)
 
 
 def main():
-
-    parser = argparse.ArgumentParser()
-
+    parser = argparse.ArgumentParser(
+        description="Run a single-agent bandit experiment from a YAML config."
+    )
     parser.add_argument(
         "--config",
         required=True,
-        help="Path to configuration file"
+        help="Path to configuration file",
     )
-
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=None,
+        help="Number of parallel workers (default: from config or 1)",
+    )
     args = parser.parse_args()
 
     cfg = load_config(args.config)
+    n_jobs = args.jobs or cfg["experiment"].get("n_jobs", 1)
 
-    regrets = run_experiment(cfg)
+    if uses_llm(cfg):
+        if n_jobs > 1:
+            print("LLM experiments run sequentially (model cannot be shared across workers).")
+            n_jobs = 1
 
-    save_results(regrets, cfg)
+        from vllm import LLM
+
+        model_name = cfg.get("agent_params", {}).get("model", "Qwen/Qwen2.5-7B-Instruct")
+        print(f"Loading LLM: {model_name}")
+        shared_model = LLM(model=model_name)
+
+        regrets = [
+            run_single_solo_with_llm(cfg, i, shared_model)
+            for i in range(cfg["experiment"]["runs"])
+        ]
+    else:
+        regrets = parallel_runs(run_single_solo, cfg, n_jobs)
+
+    save_solo_results(regrets, cfg)
 
 
 if __name__ == "__main__":

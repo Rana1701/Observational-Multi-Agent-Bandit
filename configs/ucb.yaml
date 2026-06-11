@@ -1,9 +1,0 @@
-agent: UCB
-
-environment:
-  n_arms: 5
-  delta: 0.1
-
-experiment:
-  runs: 100
-  horizon: 1000
