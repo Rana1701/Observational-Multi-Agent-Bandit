@@ -105,45 +105,18 @@ class LLMAgent:
         import json
         import re
 
-  
-        # 1. EXTRAIRE ACTION (JSON)
-        start = response.find("{")
-        action = None
+        match = re.search(r"\{.*\}", response, re.DOTALL)
+        if not match:
+            return {"action": 0, "explanation": "parse failed"}
 
-        if start != -1:
-            depth = 0
-            for i in range(start, len(response)):
-                if response[i] == "{":
-                    depth += 1
-                elif response[i] == "}":
-                    depth -= 1
-                    if depth == 0:
-                        try:
-                            obj = json.loads(response[start:i+1])
-                            if "action" in obj:
-                                action = obj.get("action")
-                                break
-                        except:
-                            pass
-
-        if action is None:
-            action = 0
-
-   
-        # 2. extract explanation
-        exp = ""
-
-        match = re.search(r"(explanation)\s*:\s*(.*)", response, re.IGNORECASE | re.DOTALL)
-
-        if match:
-            exp = match.group(2).strip()
-        else:
-            exp = "no explanation found"
-
-        return {
-            "action": action,
-            "explanation": exp
-        }
+        try:
+            obj = json.loads(match.group(0))
+            return {
+                "action": obj.get("action", 0),
+                "explanation": obj.get("explanation", "no explanation")
+            }
+        except:
+            return {"action": 0, "explanation": "invalid json"}
 
     def charging_model(self, name_parameter="Qwen/Qwen2.5-7B-Instruct"):
         try:

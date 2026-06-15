@@ -92,9 +92,27 @@ def build_llm_prompt(agent_cfg, agent):
 
     return builder(agent.t)
 
+DEFAULT_LLM = "Qwen/Qwen2.5-7B-Instruct"
 
-def run_single_solo(cfg, run_idx):
+def get_llm_model_name(cfg):
+    if "agent" in cfg:
+        return cfg.get("agent_params", {}).get(
+            "model",
+            DEFAULT_LLM,
+        )
+
+    for agent_cfg in cfg.get("agents", []):
+        if agent_cfg.get("class") == "LLM":
+            return agent_cfg.get("params", {}).get(
+                "model",
+                DEFAULT_LLM,
+            )
+
+    return DEFAULT_LLM
+
+def run_single_solo(cfg, run_idx, shared_model=None):
     exp = cfg["experiment"]
+
     seed = run_seed(exp.get("seed"), run_idx)
     bandit = build_bandit(cfg["environment"], seed)
 
@@ -102,13 +120,13 @@ def run_single_solo(cfg, run_idx):
         AGENTS[cfg["agent"]],
         bandit,
         cfg.get("agent_params"),
+        shared_model=shared_model,
     )
 
     for _ in range(exp["horizon"]):
         agent.getNextAction()
 
     return np.asarray(agent.cumul_regret, dtype=float)
-
 
 def run_single_multi(cfg, run_idx, shared_model=None):
     exp = cfg["experiment"]
