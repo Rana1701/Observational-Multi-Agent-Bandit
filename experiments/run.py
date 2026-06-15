@@ -19,23 +19,6 @@ from utils.common import (
     run_seed,
 )
 
-def run_single_solo_with_llm(cfg, run_idx, shared_model):
-    exp = cfg["experiment"]
-    seed = run_seed(exp.get("seed"), run_idx)
-    bandit = build_bandit(cfg["environment"], seed)
-
-    agent = create_agent(
-        AGENTS[cfg["agent"]],
-        bandit,
-        cfg.get("agent_params"),
-        shared_model=shared_model,
-    )
-
-    for _ in range(exp["horizon"]):
-        agent.getNextAction()
-
-    return np.asarray(agent.cumul_regret, dtype=float)
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -69,7 +52,7 @@ def main():
         shared_model = LLM(model=model_name)
 
         regrets = [
-            run_single_solo_with_llm(cfg, i, shared_model)
+            run_single_solo(cfg, i, shared_model)
             for i in range(cfg["experiment"]["runs"])
         ]
     else:

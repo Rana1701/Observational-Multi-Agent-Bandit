@@ -3,10 +3,11 @@
 import argparse
 import os
 import sys
-
+from vllm import LLM
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from utils.common import (
+    get_llm_model_name,
     load_config,
     parallel_runs,
     run_single_multi,
@@ -41,19 +42,8 @@ def main():
             print("LLM experiments run sequentially (model cannot be shared across workers).")
             n_jobs = 1
 
-        from vllm import LLM
-
-        model_name = None
-        for agent_cfg in cfg["agents"]:
-            if agent_cfg.get("class") == "LLM":
-                model_name = agent_cfg.get("params", {}).get("model")
-                break
-
-        if model_name is None:
-            model_name = "Qwen/Qwen2.5-7B-Instruct"
-
-        print(f"Loading LLM: {model_name}")
-        shared_model = LLM(model=model_name)
+        model_name = get_llm_model_name(cfg)
+        shared_model = LLM(model=model_name, max_model_len=4096)
 
         def run_with_model(config, run_idx):
             return run_single_multi(config, run_idx, shared_model=shared_model)
