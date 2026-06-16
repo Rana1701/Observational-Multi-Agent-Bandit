@@ -9,6 +9,7 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from agents.ts import TS
 from environnement.bernoulli_bandit import BernoulliBandit
 from agents.ucb import UCB
 from agents.tucb import TUCB
@@ -31,6 +32,7 @@ AGENTS = {
     "GreedyFollower": GreedyFollower,
     "EpsilonGreedy": EpsilonGreedy,
     "LLM": LLMAgent,
+    "TS" : TS,
 }
 
 PROMPT_BUILDERS = {
