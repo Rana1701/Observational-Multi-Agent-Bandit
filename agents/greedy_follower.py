@@ -1,17 +1,13 @@
-import numpy as np
 import random
 
 
-class Greedy:
+class GreedyFollower:
     """
     Greedy follower that mimics the most frequent action of the target.
     """
 
-    def __init__(self, bandit, delta=0.2):
-
+    def __init__(self, bandit):
         self.bandit = bandit
-        self.delta = delta
-
         self.K = bandit.n_arms
 
         self.target_plays = [0] * self.K
@@ -44,15 +40,10 @@ class Greedy:
             ]
             action = random.choice(candidates)
 
-        # reward
-        reward = self.bandit.pull(action)
-
-        # update own stats
+        self.bandit.pull(action)
         self.nb_plays[action] += 1
 
-        # regret (expected)
         step_regret = self.bandit.regret(action)
-
         if self.t > 1:
             self.cumul_regret.append(self.cumul_regret[-1] + step_regret)
         else:
