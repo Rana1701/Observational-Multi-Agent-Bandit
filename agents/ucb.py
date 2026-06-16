@@ -33,7 +33,7 @@ class UCB:
         self.N[arm] += 1
         self.empirical_mean[arm] += (reward - self.empirical_mean[arm]) / self.N[arm]
 
-    def getNextAction(self, prev_actions=None):
+    def getNextAction(self):
         self.t += 1
 
         arm = self.select_arm()
@@ -47,5 +47,6 @@ class UCB:
         else:
             self.cumul_regret.append(self.cumul_regret[-1] + step_regret)
 
+        print(f"UCB: t={self.t}, arm={arm}, reward={reward}, step_regret={step_regret}, cumul_regret={self.cumul_regret[-1]}")
         return arm
 
