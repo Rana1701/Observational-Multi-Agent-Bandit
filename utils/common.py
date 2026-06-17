@@ -9,6 +9,7 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from agents.alphaOptimal import alphaOptimal
 from agents.ts import TS
 from environnement.bernoulli_bandit import BernoulliBandit
 from agents.ucb import UCB
@@ -33,6 +34,7 @@ AGENTS = {
     "EpsilonGreedy": EpsilonGreedy,
     "LLM": LLMAgent,
     "TS" : TS,
+    "alphaOptimal": alphaOptimal,
 }
 
 PROMPT_BUILDERS = {
