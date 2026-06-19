@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 import yaml
 
+from agents.ucbClique import UCBClique
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -28,6 +30,7 @@ from utils.prompt_builder import (
 
 AGENTS = {
     "UCB": UCB,
+    "UCBClique": UCBClique,
     "TUCB": TUCB,
     "Greedy": Greedy,
     "GreedyFollower": GreedyFollower,
@@ -152,17 +155,21 @@ def run_single_multi(cfg, run_idx, shared_model=None):
         )
 
     cfg_by_name = {a["name"]: a for a in agent_cfgs}
+
     regrets = {name: [] for name in order}
     last_actions = {name: 0 for name in order}
     other_action_counts = [0] * bandit.n_arms
 
-    for _ in range(exp["horizon"]):
+    horizon = exp["horizon"]
+
+    for _ in range(horizon):
         current_actions = {}
 
         if interaction == "simultaneous":
             for name in order:
                 agent_cfg = cfg_by_name[name]
                 agent = agents[name]
+
                 observed = [
                     last_actions[obs_name]
                     for obs_name in agent_cfg.get("observes", [])
@@ -174,22 +181,36 @@ def run_single_multi(cfg, run_idx, shared_model=None):
                     current_actions[name] = agent.getNextAction(prompt)
                 else:
                     current_actions[name] = agent.getNextAction(observed or None)
+
         else:
-            for name in order:
+            for i, name in enumerate(order):
                 agent_cfg = cfg_by_name[name]
                 agent = agents[name]
+
                 observed = [
                     current_actions[obs_name]
                     for obs_name in agent_cfg.get("observes", [])
                 ]
 
-                if agent_cfg.get("class") == "LLM":
+                #  TUCB SPECIAL HANDLING
+                if agent_cfg.get("class") == "TUCB":
+                    k = agent_cfg.get("params", {}).get("nbr_neighbours", 1)
+
+                    prev = [
+                        current_actions[n]
+                        for n in order[:i]
+                    ][:k]
+
+                    current_actions[name] = agent.getNextAction(prev or None)
+
+                elif agent_cfg.get("class") == "LLM":
                     agent_cfg["_other_action_counts"] = other_action_counts
                     prompt = build_llm_prompt(agent_cfg, agent)
                     current_actions[name] = agent.getNextAction(prompt)
                 else:
                     current_actions[name] = agent.getNextAction(observed or None)
 
+        # update global stats
         for obs_name in cfg.get("track_other_actions_for", order):
             action = current_actions[obs_name]
             if 0 <= action < len(other_action_counts):
@@ -197,11 +218,11 @@ def run_single_multi(cfg, run_idx, shared_model=None):
 
         last_actions = current_actions
 
+    # collect regrets
     for name in order:
         regrets[name] = np.asarray(agents[name].cumul_regret, dtype=float)
 
     return regrets
-
 
 def parallel_runs(run_fn, cfg, n_jobs):
     runs = cfg["experiment"]["runs"]

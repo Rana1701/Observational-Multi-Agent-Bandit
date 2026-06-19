@@ -38,6 +38,7 @@ class TUCB:
 
         # update targets
         if self.t > 1:
+            self.targets = [0.0] * self.K  
             for a in prev_actions:
                 if 0 <= a < self.K:
                     self.targets[a] += 1.0 / self.neighbours
