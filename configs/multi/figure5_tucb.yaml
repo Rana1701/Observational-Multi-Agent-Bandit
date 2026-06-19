@@ -1,0 +1,23 @@
+experiment:
+  runs: 200
+  horizon: 100
+  seed: 42
+  n_jobs: 4
+  interaction: sequential
+  input_dir: Target-UCB/Human bandit dataset/single_humans/
+  output_dir: results/multi/figure5_tucb
+
+environment:
+  n_arms: 2
+  delta: 0.2
+  best_mean: 0.6
+
+agents:
+  - name: tucb
+    class: TUCB
+    observes: [Human]
+    params:
+      nbr_neighbours: 1
+
+humanFiles:
+  files : ["single_human_1_plays.csv", "single_human_2_plays.csv","single_human_3_plays.csv"]
