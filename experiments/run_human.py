@@ -74,7 +74,7 @@ def run_human_experiment():
         
         human_arms = load_human_csv(filepath)
         
-        bandit_ref = BernoulliBandit(n_arms=env_cfg['n_arms'], delta=env_cfg['delta'], best_mean=env_cfg['best_mean'])
+        bandit_ref = BernoulliBandit(n_arms=env_cfg['n_arms'], delta=env_cfg['delta'], best_mean=env_cfg['best_mean'],probs=env_cfg['probs'])
         
         human_step_regrets = [bandit_ref.regret(int(arm)) for arm in human_arms[:horizon]]
         human_cum_regret = np.cumsum(human_step_regrets)
@@ -84,7 +84,7 @@ def run_human_experiment():
         target_ucb_runs = np.zeros((n_runs, horizon))
         
         for run in range(n_runs):
-            bandit = BernoulliBandit(n_arms=env_cfg['n_arms'], delta=env_cfg['delta'], best_mean=env_cfg['best_mean'])
+            bandit = BernoulliBandit(n_arms=env_cfg['n_arms'], delta=env_cfg['delta'], best_mean=env_cfg['best_mean'], probs=env_cfg['probs'])
             
 
             agent = TUCB(bandit=bandit, nbr_neighbours=1, delta=env_cfg['delta'])
