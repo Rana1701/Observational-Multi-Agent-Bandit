@@ -37,7 +37,7 @@ class TUCB:
             raise ValueError("Mismatch between neighbours and actions")
 
         # update targets
-        if self.t > 1:
+        if self.t > 1: 
             for a in prev_actions:
                 if 0 <= a < self.K:
                     self.targets[a] += 1.0 / self.neighbours

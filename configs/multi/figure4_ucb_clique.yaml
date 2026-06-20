@@ -1,0 +1,18 @@
+experiment:
+  runs: 2000
+  horizon: 1000
+  seed: 42
+  n_jobs: 4
+  interaction: sequential
+  output_dir: results/figure4/ucb_clique
+
+environment:
+  n_arms: 10
+  delta: 0.1
+  best_mean: 0.5
+
+agents:
+  - name: clique
+    class: UCBClique
+    params:
+      clique_size: 11
