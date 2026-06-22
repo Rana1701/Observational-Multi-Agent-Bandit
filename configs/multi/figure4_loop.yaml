@@ -7,7 +7,7 @@ experiment:
   runs: 2000
   horizon: 1000
   seed: 42
-  output_dir: results/figure4/loop
+  output_dir: results/figure4/multi/loop
 
 environment:
   n_arms: 10
