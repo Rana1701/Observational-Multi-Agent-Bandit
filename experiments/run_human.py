@@ -52,7 +52,6 @@ def run_human_experiment():
     n_runs = 200
     horizon = 100  
     
-    # Configuration de l'environnement calquée sur les paramètres YAML ou valeurs par défaut
     env_cfg = config.get('environment', {'n_arms': 2, 'delta': 0.2, 'best_mean': 0.6})
 
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
