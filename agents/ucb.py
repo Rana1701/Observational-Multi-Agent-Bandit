@@ -18,6 +18,7 @@ class UCB:
 
         self.t = 0 
         self.cumul_regret = []
+        self.reward = 0
      
     def select_arm(self):
         for i in range(self.K):
@@ -32,6 +33,8 @@ class UCB:
     def update(self, arm, reward):
         self.N[arm] += 1
         self.empirical_mean[arm] += (reward - self.empirical_mean[arm]) / self.N[arm]
+
+        self.reward = reward
 
     def getNextAction(self, prev_actions=None):
         self.t += 1
