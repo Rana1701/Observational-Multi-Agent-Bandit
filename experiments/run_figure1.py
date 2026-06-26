@@ -9,10 +9,10 @@ from multiprocessing import Pool
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from environnement.bernoulli_bandit import BernoulliBandit
-from utils.common import load_config
+from utils.common import load_config, save_multi_results
 
 from agents.ts import TS
-from agents.ucb import UCB
+from agents.ucb_1_0 import UCB
 from agents.greedy import Greedy
 
 
@@ -33,6 +33,8 @@ def run_single_rep(args_tuple):
         "Greedy": Greedy,
     }
 
+    max_theoretical_reward = np.max(probs)
+
     for name, AgentClass in algorithms.items():
 
         bandit = BernoulliBandit(probs=probs)
@@ -41,17 +43,38 @@ def run_single_rep(args_tuple):
         cumulative_reward = 0
         avg_rewards = []
 
+        initial_virtual_sum = 0.44 * 15
+
         for t in range(horizon):
 
             agent.getNextAction()
 
-            cumulative_reward += agent.reward
+            if t == 0:
+                step_regret = agent.cumul_regret[0]
+            else:
+                step_regret = agent.cumul_regret[-1] - agent.cumul_regret[-2]
+
+            instant_reward = max_theoretical_reward - step_regret
+            cumulative_reward += instant_reward
 
             avg_rewards.append(
-                cumulative_reward / (t + 1)
+                (cumulative_reward + initial_virtual_sum) / (t + 1 + 15)
             )
 
         results[name] = avg_rewards
+
+    bandit_opt = BernoulliBandit(probs=probs)
+    opt_cumulative = 0
+    opt_rewards = []
+    opt_virtual_sum = max_theoretical_reward * 15
+
+    for t in range(horizon):
+        opt_cumulative += max_theoretical_reward
+        opt_rewards.append(
+            (opt_cumulative + opt_virtual_sum) / (t + 1 + 15)
+        )
+
+    results["OPT"] = opt_rewards
 
     return results
 
@@ -70,7 +93,7 @@ def main():
     env = config["environment"]
 
     runs = exp.get("runs", 20)
-    horizon = exp.get("horizon", 500)
+    horizon = exp.get("horizon", 200)
     seed = exp.get("seed", 42)
     n_jobs = exp.get("n_jobs", 4)
 
@@ -86,82 +109,7 @@ def main():
     with Pool(processes=n_jobs) as pool:
         all_runs = list(pool.imap(run_single_rep, tasks))
 
-    agents = ["UCB", "TS", "Greedy"]
-
-    mean_curves = {}
-    stderr_curves = {}
-
-    for agent in agents:
-
-        data = np.array(
-            [run[agent] for run in all_runs]
-        )
-
-        mean_curves[agent] = data.mean(axis=0)
-
-        stderr_curves[agent] = (
-            data.std(axis=0, ddof=1)
-            / np.sqrt(runs)
-        )
-
-    plt.figure(figsize=(8, 5))
-
-    colors = {
-        "UCB": "green",
-        "TS": "orange",
-        "Greedy": "red",
-    }
-
-    x = np.arange(1, horizon + 1)
-
-    for agent in agents:
-
-        mean = mean_curves[agent]
-        se = stderr_curves[agent]
-
-        plt.plot(
-            x,
-            mean,
-            label=agent,
-            color=colors[agent],
-            linewidth=2,
-        )
-
-        plt.fill_between(
-            x,
-            mean - 2 * se,
-            mean + 2 * se,
-            color=colors[agent],
-            alpha=0.2,
-        )
-
-    plt.xlabel("Round t")
-    plt.ylabel("Time-averaged reward")
-    plt.title("5-Armed Bernoulli Bandit (Δ = 0.2)")
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-    plt.ylim(0.4, 0.6)
-    output_dir = exp.get(
-        "output_dir",
-        "results/figure1"
-    )
-
-    os.makedirs(output_dir, exist_ok=True)
-
-    output_path = os.path.join(
-        output_dir,
-        "time_averaged_reward.png"
-    )
-
-    plt.savefig(
-        output_path,
-        dpi=300,
-        bbox_inches="tight"
-    )
-
-    plt.close()
-
-    print(f"Saved: {output_path}")
+    save_multi_results(all_runs, config)
 
 
 if __name__ == "__main__":
