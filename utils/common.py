@@ -20,6 +20,7 @@ from agents.greedy import Greedy
 from agents.greedy_follower import GreedyFollower
 from agents.e_greedy import EpsilonGreedy
 from agents.llm import LLMAgent
+from agents.ucb_1_0 import UCB1
 from utils.prompt_builder import (
     build_prompt,
     build_prompt2,
@@ -30,6 +31,7 @@ from utils.prompt_builder import (
 
 AGENTS = {
     "UCB": UCB,
+    "UCB1": UCB1,
     "UCBClique": UCBClique,
     "TUCB": TUCB,
     "Greedy": Greedy,

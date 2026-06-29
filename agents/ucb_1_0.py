@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class UCB:
+class UCB1:
     """
     UCB algorithm for K-armed bandits 
     """
@@ -26,7 +26,7 @@ class UCB:
                 return i
 
         # UCB scores for each arm
-        ucb = self.empirical_mean + np.sqrt(2 * np.log(self.t) / self.N)
+        ucb = self.empirical_mean + np.sqrt(0.25 * np.log(self.t) / self.N)
 
         return int(np.argmax(ucb))
 
