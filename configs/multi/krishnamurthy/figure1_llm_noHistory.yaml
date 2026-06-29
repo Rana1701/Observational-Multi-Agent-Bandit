@@ -6,8 +6,7 @@ experiment:
   runs: 20
   interaction: sequential
   order: [ucb1,Greedy, ts ,llm_history]
-  output_dir: results/multi/llm_ucb_history
-  track_other_actions_for: [ucb, Greedy, ts]
+  output_dir: results/multi/llm_ucb_noHistory
 
 environment:
   n_arms: 5
@@ -22,8 +21,8 @@ agents:
     class: TS
   - name: Greedy
     class: Greedy
-  - name: llm_history
+  - name: llm_no_history
     class: LLM
-    prompt: history
+    prompt: no_history
     params:
       model: Qwen/Qwen2.5-7B-Instruct

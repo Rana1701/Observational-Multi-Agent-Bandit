@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class UCB:
+class UCB1:
     """
     UCB algorithm for K-armed bandits 
     """

@@ -11,54 +11,63 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from environnement.bernoulli_bandit import BernoulliBandit
 from utils.common import load_config, save_multi_results
 
-from agents.ts import TS
-from agents.ucb_1_0 import UCB
-from agents.greedy import Greedy
+from utils.common import (
+    load_config,
+    parallel_runs,
+    run_seed,
+    build_bandit,
+    create_agent,
+    AGENTS,
+    build_llm_prompt,
+    uses_llm,
+    get_llm_model_name,
+    save_multi_results,
+)
 
-
-def run_single_rep(args_tuple):
-
-    rep_idx, horizon, probs, seed = args_tuple
-
-    run_seed = seed + rep_idx
-
-    np.random.seed(run_seed)
-    random.seed(run_seed)
+def run_single_rep(task, shared_model=None):
+    run_idx, cfg = task
+    probs = cfg["environment"].get("probs", None)
+    exp = cfg["experiment"]
+    seed = run_seed(exp.get("seed"), run_idx)
+    np.random.seed(seed)
+    agent_cfgs = cfg["agents"]
+    order = exp.get("order") or [a["name"] for a in agent_cfgs]
+    interaction = exp.get("interaction", "sequential")
+    horizon = exp["horizon"]
 
     results = {}
-
-    algorithms = {
-        "UCB": UCB,
-        "TS": TS,
-        "Greedy": Greedy,
-    }
+    agents = {}
+    cfg_by_name = {}
 
     max_theoretical_reward = np.max(probs)
 
-    for name, AgentClass in algorithms.items():
+    bandit = BernoulliBandit(probs=probs)
+    for a in agent_cfgs:
+        name = a["name"]
+        cfg_by_name[name] = a
 
-        bandit = BernoulliBandit(probs=probs)
-        agent = AgentClass(bandit)
+        agents[name] = create_agent(
+            AGENTS[a["class"]],
+            bandit,
+            a.get("params"),
+            shared_model=shared_model,
+        )
+
+        agent = agents[name]
 
         cumulative_reward = 0
         avg_rewards = []
 
-        initial_virtual_sum = 0.44 * 15
+        #initial_virtual_sum =0
 
         for t in range(horizon):
-
             agent.getNextAction()
-
-            if t == 0:
-                step_regret = agent.cumul_regret[0]
-            else:
-                step_regret = agent.cumul_regret[-1] - agent.cumul_regret[-2]
-
-            instant_reward = max_theoretical_reward - step_regret
-            cumulative_reward += instant_reward
+            agent.getNextAction()
+            reward = agent.reward 
+            cumulative_reward += reward
 
             avg_rewards.append(
-                (cumulative_reward + initial_virtual_sum) / (t + 1 + 15)
+                (cumulative_reward ) / (t + 1 + 15)
             )
 
         results[name] = avg_rewards
@@ -66,12 +75,11 @@ def run_single_rep(args_tuple):
     bandit_opt = BernoulliBandit(probs=probs)
     opt_cumulative = 0
     opt_rewards = []
-    opt_virtual_sum = max_theoretical_reward * 15
 
     for t in range(horizon):
         opt_cumulative += max_theoretical_reward
         opt_rewards.append(
-            (opt_cumulative + opt_virtual_sum) / (t + 1 + 15)
+            (opt_cumulative ) / (t + 1 )
         )
 
     results["OPT"] = opt_rewards
@@ -90,24 +98,14 @@ def main():
     config = load_config(args.config)
 
     exp = config["experiment"]
-    env = config["environment"]
-
     runs = exp.get("runs", 20)
-    horizon = exp.get("horizon", 200)
-    seed = exp.get("seed", 42)
     n_jobs = exp.get("n_jobs", 4)
 
-    probs = env["probs"]
-
-    tasks = [
-        (i, horizon, probs, seed)
-        for i in range(runs)
-    ]
-
+    tasks = [(i, config) for i in range(runs)]
     print(f"Running {runs} replicates...")
 
     with Pool(processes=n_jobs) as pool:
-        all_runs = list(pool.imap(run_single_rep, tasks))
+        all_runs = pool.map(run_single_rep, tasks)
 
     save_multi_results(all_runs, config)
 
