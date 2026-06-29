@@ -16,6 +16,7 @@ class Greedy:
 
         self.t = 0
         self.cumul_regret = []
+        self.reward = 0
 
     def getNextAction(self, prev_actions=None):
         self.t += 1
@@ -28,6 +29,7 @@ class Greedy:
             action = random.choice(candidates)
 
         reward = self.bandit.pull(action)
+        self.reward = reward
 
         self.nb_plays[action] += 1
         n = self.nb_plays[action]
