@@ -5,6 +5,7 @@ import sys
 import random
 import matplotlib.pyplot as plt
 from multiprocessing import Pool
+from vllm import LLM
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -70,9 +71,7 @@ def run_single_rep(task, shared_model=None):
 
         current_actions = {}
 
-        # =========================
-        # SEQUENTIAL (like paper)
-        # =========================
+        # SEQUENTIAL 
         if interaction == "sequential":
 
             for i, name in enumerate(order):
@@ -100,9 +99,7 @@ def run_single_rep(task, shared_model=None):
                 cumulative[name] += reward
                 rewards_ts[name].append(cumulative[name] / (t + 1))
 
-        # =========================
         # SIMULTANEOUS
-        # =========================
         else:
 
             actions = {}
@@ -128,9 +125,7 @@ def run_single_rep(task, shared_model=None):
 
             current_actions = actions
 
-        # =========================
-        # OPT baseline
-        # =========================
+        # OPT 
         opt_cum += max_theoretical_reward
         opt_curve.append(opt_cum / (t + 1))
 
@@ -156,12 +151,25 @@ def main():
     exp = config["experiment"]
     runs = exp.get("runs", 20)
     n_jobs = exp.get("n_jobs", 4)
-
     tasks = [(i, config) for i in range(runs)]
-    print(f"Running {runs} replicates...")
+    all_runs = []
 
-    with Pool(processes=n_jobs) as pool:
-        all_runs = pool.map(run_single_rep, tasks)
+    if uses_llm(config):
+        if n_jobs > 1:
+            print("LLM experiments run sequentially (model cannot be shared across workers).")
+            n_jobs = 1
+
+        model_name = get_llm_model_name(config)
+        shared_model = LLM(model=model_name, max_model_len=4096)
+
+        for i in range(runs):
+            res = run_single_rep((i, config), shared_model)
+            all_runs.append(res)
+    else :
+        print(f"Running {runs} replicates...")
+
+        with Pool(processes=n_jobs) as pool:
+            all_runs = pool.map(run_single_rep, tasks)
 
     save_multi_results(all_runs, config)
 

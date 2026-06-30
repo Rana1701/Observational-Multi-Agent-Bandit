@@ -1,12 +1,11 @@
 experiment:
   seed: 40
-  n_jobs: 4
-  output_dir: results/multi/figure1_llm
+  n_jobs: 1
+  output_dir: results/multi/figure1_llm2
   horizon: 500
   runs: 20
   interaction: sequential
   order: [ucb1,Greedy, ts ,llm_history]
-  output_dir: results/multi/llm_ucb_history
   track_other_actions_for: [ucb, Greedy, ts]
 
 environment:

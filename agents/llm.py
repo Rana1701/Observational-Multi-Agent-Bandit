@@ -121,7 +121,9 @@ class LLMAgent:
     def charging_model(self, name_parameter="Qwen/Qwen2.5-7B-Instruct"):
         try:
             return LLM(model=name_parameter)
-        except Exception:
+        except Exception as e:
+            print("Erreur lors du chargement du modèle :")
+            print(repr(e))
             return None
 
 
