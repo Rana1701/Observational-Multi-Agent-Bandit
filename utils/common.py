@@ -22,11 +22,13 @@ from agents.e_greedy import EpsilonGreedy
 from agents.llm import LLMAgent
 from agents.ucb_1_0 import UCB1
 from utils.prompt_builder import (
-    build_prompt,
-    build_prompt2,
-    build_prompt_ucb,
+    build_prompt_history,
+    build_prompt_noHistory,
     build_prompt_ucb_history,
     build_prompt_exploit,
+    build_prompt_ucb_noHistory,
+    build_prompt_explore,
+    build_prompt_krishnamurthy,
 )
 
 AGENTS = {
@@ -44,11 +46,13 @@ AGENTS = {
 
 PROMPT_BUILDERS = {
     "default": None,
-    "history": build_prompt,
-    "no_history": build_prompt2,
-    "ucb": build_prompt_ucb,
+    "history": build_prompt_history ,
+    "no_history": build_prompt_noHistory ,
+    "ucb": build_prompt_ucb_noHistory,
     "ucb_history": build_prompt_ucb_history,
     "exploit": build_prompt_exploit,
+    "explore": build_prompt_explore,
+    "krishnamurthy": build_prompt_krishnamurthy,
 }
 
 
@@ -92,14 +96,8 @@ def build_llm_prompt(agent_cfg, agent):
     if builder is None:
         return None
 
-    if prompt_name in {"history", "ucb_history"}:
-        other_actions = agent_cfg.get("_other_action_counts", [0, 0])
-        return builder(agent.t, agent.history, other_actions)
-
-    if prompt_name == "exploit":
-        return builder()
-
-    return builder(agent.t)
+    other_actions = agent_cfg.get("_other_action_counts", None)
+    return builder(agent.bandit, agent.t, agent.history, other_actions)
 
 DEFAULT_LLM = "Qwen/Qwen2.5-7B-Instruct"
 
