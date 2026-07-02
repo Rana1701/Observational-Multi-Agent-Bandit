@@ -22,7 +22,7 @@ class LLMAgent:
         self.history = {str(i): {"pulls": 0, "reward": 0} for i in range(self.bandit.n_arms)}
 
         self.default_prompt = (
-                f"You are a multi-armed bandit agent. You have {self.bandit.n_arms} arms to choose from."
+                f"You are a multi-armed bandit agent. You have k= {self.bandit.n_arms} arms to choose from."
                 " Each arm has a certain probability of giving a reward."
                 " Your goal is to maximize your cumulative reward over time."
                 " At each time step, you can observe the previous actions of the other agents,"
@@ -30,8 +30,8 @@ class LLMAgent:
                 " Based on the actions of the other agents and your own experience,"
                 " you need to decide which arm to pull next."
                 "Please answer in the following JSON format: "
-                "{\"action\": integer in [0, K-1] \"explanation\": \"Your explanation here\"}"
-                "Return ONLY one valid JSON object."
+                "{\"action\": integer in [0, K-1], \"explanation\": \"Your explanation here\"}"
+                "Return ONLY one valid JSON object with keys action and explication."
                 "Do not output multiple JSON objects."
                 "Do not use markdown."
                 "Do not write any text before or after."
@@ -58,11 +58,12 @@ class LLMAgent:
 
             response = result[0].outputs[0].text
 
-            #print("RAW RESPONSE:")
-            #print(response)
+            print("RAW RESPONSE:")
+            print(response)
 
         except Exception as e:
             print("GENERATION ERROR:", repr(e))
+            self.error += 1
             return {"action": 0, "explanation": "model generation failed"}
 
         try:
@@ -70,7 +71,7 @@ class LLMAgent:
         except:
             self.error += 1
             return {
-                "action": 0,
+                "action": 1,
                 "explanation": "parse failed"
             }
 
@@ -99,24 +100,103 @@ class LLMAgent:
         else:
             self.cumul_regret.append(step_regret)
 
+        print(f"Action {action} , Explanation: {self.explanation}")
+        print(f"parse errors: {self.error} ")
         return action
 
     def extract_json(self, response):
         import json
         import re
 
-        match = re.search(r"\{.*\}", response, re.DOTALL)
-        if not match:
-            return {"action": 0, "explanation": "parse failed"}
+        response = response.strip()
 
-        try:
-            obj = json.loads(match.group(0))
-            return {
-                "action": obj.get("action", 0),
-                "explanation": obj.get("explanation", "no explanation")
-            }
-        except:
-            return {"action": 0, "explanation": "invalid json"}
+        def parse_json_text(text):
+            text = text.replace("'", '"')
+            text = re.sub(r",\s*\}", "}", text)
+            text = re.sub(r",\s*\]", "]", text)
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                # Fallback: quote unquoted keys
+                repaired = re.sub(
+                    r"(?<!\")\b(action|explication|explanation|distribution)\b\s*:\s*",
+                    r'"\1": ',
+                    text,
+                )
+                try:
+                    return json.loads(repaired)
+                except json.JSONDecodeError:
+                    return None
+
+        def get_first_brace_block(text):
+            start = text.find("{")
+            if start < 0:
+                return None
+            depth = 0
+            for i, ch in enumerate(text[start:], start):
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return text[start:i+1]
+            return text[start:]
+
+        # Try to parse the first balanced JSON block
+        block = get_first_brace_block(response)
+        if block:
+            obj = parse_json_text(block)
+            if isinstance(obj, dict):
+                action = obj.get("action")
+                explanation = obj.get("explication") or obj.get("explanation")
+                if isinstance(action, int) and 0 <= action < self.bandit.n_arms:
+                    if explanation is None:
+                        explanation = "missing explication"
+                    return {"action": action, "explanation": str(explanation)}
+
+            # If the block is incomplete, try to repair it
+            if not block.rstrip().endswith("}"):
+                repaired = block
+                if repaired.count('"') % 2 != 0:
+                    repaired += '"'
+                repaired += "}"
+                obj = parse_json_text(repaired)
+                if isinstance(obj, dict):
+                    action = obj.get("action")
+                    explanation = obj.get("explication") or obj.get("explanation")
+                    if isinstance(action, int) and 0 <= action < self.bandit.n_arms:
+                        if explanation is None:
+                            explanation = "missing explication"
+                        return {"action": action, "explanation": str(explanation)}
+
+        # If JSON parsing fails, try a looser key/value extraction
+        action = None
+        explanation = None
+
+        m = re.search(r"\baction\b\s*(?:[:=]\s*)?(\d+)", response, re.I)
+        if m:
+            action = int(m.group(1))
+
+        m = re.search(r"\b(explication|explanation)\b\s*(?:[:=\-]\s*)?[\'\"]([^\'\"]+)[\'\"]", response, re.I)
+        if m:
+            explanation = m.group(2).strip()
+        else:
+            m = re.search(r"\b(explication|explanation)\b\s*(?:[:=\-]\s*)?(.+)$", response, re.I)
+            if m:
+                explanation = m.group(2).strip()
+
+        if action is not None:
+            if explanation is None:
+                m = re.search(r"Explanation\s*[:\-]\s*(.+)$", response, re.I)
+                if m:
+                    explanation = m.group(1).strip()
+            if explanation is None:
+                explanation = "missing explication"
+            if 0 <= action < self.bandit.n_arms:
+                return {"action": action, "explanation": explanation}
+
+        self.error += 1
+        return {"action": 0, "explanation": "parse failed"}
 
     def charging_model(self, name_parameter="Qwen/Qwen2.5-7B-Instruct"):
         try:
