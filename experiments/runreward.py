@@ -5,6 +5,7 @@ import sys
 import random
 import matplotlib.pyplot as plt
 from multiprocessing import Pool
+from vllm import LLM
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -60,7 +61,9 @@ def run_single_rep(task, shared_model=None):
     # ===== OUTPUT STORAGE =====
     cumulative = {name: 0.0 for name in order}
     rewards_ts = {name: [] for name in order}
-
+    last_actions = {name: 0 for name in order}
+    other_action_counts = [0] * bandit.n_arms
+    
     # OPT baseline
     opt_cum = 0.0
     opt_curve = []
@@ -70,9 +73,7 @@ def run_single_rep(task, shared_model=None):
 
         current_actions = {}
 
-        # =========================
-        # SEQUENTIAL (like paper)
-        # =========================
+        # SEQUENTIAL 
         if interaction == "sequential":
 
             for i, name in enumerate(order):
@@ -81,7 +82,10 @@ def run_single_rep(task, shared_model=None):
 
                 # ---- LLM case ----
                 if cfg_a.get("class") == "LLM":
+                    
+                    cfg_a["_other_action_counts"] = other_action_counts
                     prompt = build_llm_prompt(cfg_a, agent)
+                    # print(prompt)
                     action = agent.getNextAction(prompt)
 
                 # ---- normal agent ----
@@ -94,15 +98,14 @@ def run_single_rep(task, shared_model=None):
                     action = agent.getNextAction(observed or None)
 
                 reward = bandit.pull(action)
+                # print(f"Agent {name} selected action {action} and received reward {reward}")
 
                 current_actions[name] = action
 
                 cumulative[name] += reward
                 rewards_ts[name].append(cumulative[name] / (t + 1))
 
-        # =========================
         # SIMULTANEOUS
-        # =========================
         else:
 
             actions = {}
@@ -112,7 +115,9 @@ def run_single_rep(task, shared_model=None):
                 cfg_a = cfg_by_name[name]
 
                 if cfg_a.get("class") == "LLM":
+                    cfg_a["_other_action_counts"] = other_action_counts
                     prompt = build_llm_prompt(cfg_a, agent)
+                    print(prompt)
                     action = agent.getNextAction(prompt)
                 else:
                     action = agent.getNextAction(None)
@@ -128,12 +133,17 @@ def run_single_rep(task, shared_model=None):
 
             current_actions = actions
 
-        # =========================
-        # OPT baseline
-        # =========================
+        # OPT 
         opt_cum += max_theoretical_reward
         opt_curve.append(opt_cum / (t + 1))
+    
+        # update global stats
+        for obs_name in cfg.get("track_other_actions_for", order):
+            action = current_actions[obs_name]
+            if 0 <= action < len(other_action_counts):
+                other_action_counts[action] += 1
 
+        last_actions = current_actions
     out = {}
 
     for name in order:
@@ -156,12 +166,25 @@ def main():
     exp = config["experiment"]
     runs = exp.get("runs", 20)
     n_jobs = exp.get("n_jobs", 4)
-
     tasks = [(i, config) for i in range(runs)]
-    print(f"Running {runs} replicates...")
+    all_runs = []
 
-    with Pool(processes=n_jobs) as pool:
-        all_runs = pool.map(run_single_rep, tasks)
+    if uses_llm(config):
+        if n_jobs > 1:
+            print("LLM experiments run sequentially (model cannot be shared across workers).")
+            n_jobs = 1
+
+        model_name = get_llm_model_name(config)
+        shared_model = LLM(model=model_name, max_model_len=4096)
+
+        for i in range(runs):
+            res = run_single_rep((i, config), shared_model)
+            all_runs.append(res)
+    else :
+        print(f"Running {runs} replicates...")
+
+        with Pool(processes=n_jobs) as pool:
+            all_runs = pool.map(run_single_rep, tasks)
 
     save_multi_results(all_runs, config)
 
