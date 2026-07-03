@@ -22,23 +22,26 @@ class LLMAgent:
         self.history = {str(i): {"pulls": 0, "reward": 0} for i in range(self.bandit.n_arms)}
 
         self.default_prompt = (
-                f"You are a multi-armed bandit agent. You have k= {self.bandit.n_arms} arms to choose from."
-                " Each arm has a certain probability of giving a reward."
-                " Your goal is to maximize your cumulative reward over time."
-                " At each time step, you can observe the previous actions of the other agents,"
-                " but not their rewards."
-                " Based on the actions of the other agents and your own experience,"
-                " you need to decide which arm to pull next."
-                "Please answer in the following JSON format: "
-                "{\"action\": integer in [0, K-1], \"explanation\": \"Your explanation here\"}"
-                "Return ONLY one valid JSON object with keys action and explication."
-                "Do not output multiple JSON objects."
-                "Do not use markdown."
-                "Do not write any text before or after."
+                f"You are a multi-armed bandit agent with {self.bandit.n_arms} arms.\n"
+                "Maximize cumulative reward. Base decisions on other agents' observed actions and your experience.\n"
+                "Respond ONLY with valid JSON, nothing else:\n"
+                f'{{\"action\": <int 0 to {self.bandit.n_arms-1}>, \"explication\": \"<reason>\"}}\n'
+                "CRITICAL: Return only ONE JSON object. No markdown, no extra text before/after."
             )
 
         self.cumul_regret = []
         self.t = 0
+
+    def _clean_response(self, response):
+        """Clean LLM response to remove extra markers and formatting."""
+        import re
+        # Remove markdown markers, system/user markers, etc.
+        response = re.sub(r'\[/?(?:SYSTEM|USER|JSON)\]', '', response)
+        response = re.sub(r'^JSON\s*', '', response, flags=re.MULTILINE)
+        response = re.sub(r'(?:Explanation|explication)\s*[:\-]\s*', 'explanation": "', response, flags=re.IGNORECASE)
+        # Remove leading/trailing whitespace and common junk
+        response = response.strip()
+        return response
 
     def ask(self, prompt):
         if self.model is None:
@@ -47,8 +50,10 @@ class LLMAgent:
 
         try:
             sampling_params = SamplingParams(
-                temperature=0.7,
-                max_tokens=32
+                temperature=0,
+                max_tokens=256,
+                top_p=0.9,
+                stop=["}"]
             )
 
             result = self.model.generate(
@@ -56,7 +61,11 @@ class LLMAgent:
                 sampling_params
             )
 
-            response = result[0].outputs[0].text
+            response = result[0].outputs[0].text.strip()
+            
+            # Only add closing brace if not already present
+            if not response.rstrip().endswith("}"):
+                response += "}"
 
             print("RAW RESPONSE:")
             print(response)
@@ -71,7 +80,7 @@ class LLMAgent:
         except:
             self.error += 1
             return {
-                "action": 1,
+                "action": 0,
                 "explanation": "parse failed"
             }
 
@@ -114,6 +123,9 @@ class LLMAgent:
             text = text.replace("'", '"')
             text = re.sub(r",\s*\}", "}", text)
             text = re.sub(r",\s*\]", "]", text)
+            # Remove any trailing commas and extra spaces/newlines before closing braces
+            text = re.sub(r"\s*,\s*}", "}", text)
+            text = re.sub(r"\s*}\s*$", "}", text)
             try:
                 return json.loads(text)
             except json.JSONDecodeError:
@@ -181,15 +193,16 @@ class LLMAgent:
         if m:
             explanation = m.group(2).strip()
         else:
-            m = re.search(r"\b(explication|explanation)\b\s*(?:[:=\-]\s*)?(.+)$", response, re.I)
+            m = re.search(r"\b(explication|explanation)\b\s*(?:[:=\-]\s*)?([^}]+?)(?:[,}]|$)", response, re.I)
             if m:
-                explanation = m.group(2).strip()
+                explanation = m.group(2).strip().strip('\'"')
 
         if action is not None:
             if explanation is None:
-                m = re.search(r"Explanation\s*[:\-]\s*(.+)$", response, re.I)
+                # Try to extract from "Explanation: " style
+                m = re.search(r"(?:explication|explanation)\s*[:\-]\s*(.+?)(?:[,}]|$)", response, re.I)
                 if m:
-                    explanation = m.group(1).strip()
+                    explanation = m.group(1).strip().strip('\'"')
             if explanation is None:
                 explanation = "missing explication"
             if 0 <= action < self.bandit.n_arms:

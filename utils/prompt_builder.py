@@ -108,8 +108,6 @@ So far you have played {nb_plays} times.
 def build_prompt_history(bandit, nb_plays, arm_stats, other_actions = None):
     prompt = ""
     prompt += f"""
-[SYSTEM]
-
 You are a multi-armed bandit algorithm solving a {bandit.n_arms}-armed Bernoulli bandit problem.
 
 There are {bandit.n_arms} arms:
@@ -131,15 +129,13 @@ You MUST return a valid JSON object and nothing else.
 Expected format:
 
 {{
-    "action": 0,
-    "explication": "your reasoning"
+    "action": x,
+    "explication": "your reasoning step by step"
 }}
-
-[USER]
 
 So far you have played {nb_plays} times.
 
-Your personal observations:
+Statistics : here is your personal history of actions and rewards:
 
     """
     for i in range(bandit.n_arms):
@@ -150,7 +146,7 @@ Your personal observations:
 
     """
     if other_actions is not None:
-        prompt += f"Observed actions of other agent(s) :"
+        prompt += f"Total observed actions of other agent(s) :"
         for i in range(bandit.n_arms):
             prompt += f"""
         - Arm {i} selected {other_actions[i]} times
@@ -159,22 +155,23 @@ Your personal observations:
     prompt += f"""
     Which arm should be selected next?
 
-    Think step-by-step before answering.
-
     Remember:
     Return ONLY ONE JSON object with keys:
     - action (0 ... {bandit.n_arms - 1})
     - explication (string)
-    Do not add any text before or after.
-    Do not use markdown.
+    Do not return the prompt in your answer
     """
+    prompt += f"""
+    ---
+    FINAL INSTRUCTION: Generate EXACTLY ONE JSON object below and STOP immediately after the closing }}.
+    Do NOT generate multiple responses, do NOT use markdown code blocks.
+    Your single response:"""
     return prompt
+
 # Prompt without history
 def build_prompt_noHistory(bandit, nb_plays, arm_stats= None, other_actions = None):
 
     return f"""
-[SYSTEM]
-
 You are a multi-armed bandit algorithm solving a {bandit.n_arms}-armed Bernoulli bandit problem.
 
 There are {bandit.n_arms} arms:
@@ -182,31 +179,20 @@ There are {bandit.n_arms} arms:
 
 Each arm has an unknown but fixed probability of returning reward 1.
 Whenever an arm is pulled, the reward is either 0 or 1.
-
 Your objective is to maximize cumulative reward over time.
 
-Think carefully about which arm is most promising.
-Reason step-by-step before making a decision.
-
-You MUST return a valid JSON object and nothing else.
-
-Expected format:
+You MUST return a valid JSON object and nothing else. Expected format:
 
 {{
-    "action": 0,
-    "explication": "your reasoning"
+    "action": x,
+    "explication": "your reasoning step by step"
 }}
 
 The action must be between 0 and {bandit.n_arms - 1}
-
-[USER]
-
 So far you have played {nb_plays} times.
 
-Think step-by-step before answering.
-
 Remember:
-Return ONLY ONE JSON object with keys:
+- Return ONLY ONE JSON object with keys:
 - action (0 ... {bandit.n_arms - 1})
 - explication (string)
 Do not add any text before or after.
@@ -236,7 +222,7 @@ You MUST return you answer as a valid JSON object and nothing else.
 Expected format:
 
 {{
-    "action": 0,
+    "action": x,
     "explication": "your reasoning"
 }}
 
@@ -274,7 +260,7 @@ You MUST return you answer as a valid JSON object and nothing else.
 Expected format:
 
 {{
-    "action": 0,
+    "action": x,
     "explication": "your reasoning"
 }}
 
@@ -289,8 +275,8 @@ Do not use markdown.
 """
 
 def build_prompt_explore(bandit, nb_plays = None, arm_stats = None, other_actions = None):
-    return f"""
-[SYSTEM]
+    prompt = ""
+    prompt += f"""
 
 You are an exploring multi-armed bandit algorithm solving a {bandit.n_arms}-armed Bernoulli bandit problem.
 
@@ -300,18 +286,32 @@ There are {bandit.n_arms} arms:
 Whenever an arm is pulled, the reward is either 0 or 1.
 
 You should explore frequently and avoid sticking to a single arm.
+Never replay the same arm more than 2 times in a row.
+Even if an arm has a high observed average reward, you should still explore other arms.
 
 You MUST return you answer as a valid JSON object and nothing else.
 
 Expected format:
 
 {{
-    "action": 0,
+    "action": x,
     "explication": "your reasoning"
 }}
+"""
+    prompt += f"""
+So far you have played {nb_plays} times.
 
-[USER]
+Statistics : here is your personal history of actions and rewards:
 
+    """
+    for i in range(bandit.n_arms):
+        prompt += f"""
+    Arm {i}:
+    - Pulled {arm_stats[str(i)]["pulls"]} times
+    - Average reward: {arm_stats[str(i)]["reward"] / arm_stats[str(i)]["pulls"] if arm_stats[str(i)]["pulls"] > 0 else 0:.3f}
+
+    """
+    prompt += f"""
 Remember:
 Return ONLY ONE JSON object with keys:
 - action (0 ... {bandit.n_arms - 1})
@@ -342,7 +342,7 @@ You MUST return a valid JSON object and nothing else.
 Expected format:
 
 {{
-    "action": 0,
+    "action": x,
     "explication": "your reasoning"
 }}
 

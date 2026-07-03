@@ -2,8 +2,8 @@ experiment:
   seed: 40
   n_jobs: 1
   output_dir: results/multi/figure1_llm_history
-  horizon: 10
-  runs: 1
+  horizon: 500
+  runs: 20
   interaction: sequential
   order: [ucb1,Greedy, ts ,llm_history]
   track_other_actions_for: [ucb, Greedy, ts]
@@ -12,7 +12,7 @@ environment:
   n_arms: 5
   delta: 0.2
   best_mean: 0.6
-  probs: [0.6, 0.4, 0.4, 0.4, 0.4]
+  probs: [0.4, 0.4, 0.6, 0.4, 0.4]
 
 agents:
   - name: ucb1
