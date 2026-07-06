@@ -11,7 +11,7 @@ environment:
   n_arms: 5
   delta: 0.2
   best_mean: 0.6
-  probs: [0.6, 0.4, 0.4, 0.4, 0.4]
+  probs: [0.4, 0.4, 0.6, 0.4, 0.4]
 
 agents:
   - name: ucb1

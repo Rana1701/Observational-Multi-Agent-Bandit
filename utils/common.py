@@ -92,9 +92,16 @@ def uses_llm(cfg):
 def build_llm_prompt(agent_cfg, agent):
     prompt_name = agent_cfg.get("prompt", "default")
     builder = PROMPT_BUILDERS.get(prompt_name)
-
+    print (prompt_name, builder)
     if builder is None:
         return None
+
+    if prompt_name == "krishnamurthy":
+        other_actions = agent_cfg.get("_other_action_counts", None)
+        return builder(agent.bandit, agent.t, agent.history, other_actions,
+                         agent_cfg.get("prompt_tuple", [])[0], agent_cfg.get("prompt_tuple", [])[1],
+                         agent_cfg.get("prompt_tuple", [])[2], agent_cfg.get("prompt_tuple", [])[3],
+                         agent_cfg.get("prompt_tuple", [])[4])
 
     other_actions = agent_cfg.get("_other_action_counts", None)
     return builder(agent.bandit, agent.t, agent.history, other_actions)
