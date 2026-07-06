@@ -15,6 +15,7 @@ class LLMAgent:
     def __init__(self,bandit,  name_parameter="Qwen/Qwen2.5-7B-Instruct", model=None):
 
         self.bandit = bandit
+        self.reward = 0
         self.error = 0 # count parsing errors
         self.explanation = ""
         self.model = model if model is not None else self.charging_model(name_parameter)
@@ -66,9 +67,10 @@ class LLMAgent:
             # Only add closing brace if not already present
             if not response.rstrip().endswith("}"):
                 response += "}"
-
-            print("RAW RESPONSE:")
-            print(response)
+            
+            if self.t < 10: # Print the first few responses for debugging
+                print("RAW RESPONSE:")
+                print(response)
 
         except Exception as e:
             print("GENERATION ERROR:", repr(e))
@@ -109,8 +111,9 @@ class LLMAgent:
         else:
             self.cumul_regret.append(step_regret)
 
-        print(f"Action {action} , Explanation: {self.explanation}")
-        print(f"parse errors: {self.error} ")
+        #print(f"Action {action} , Explanation: {self.explanation}")
+        if self.t >498: 
+            print(f"parse errors: {self.error} ")
         return action
 
     def extract_json(self, response):
@@ -221,7 +224,8 @@ class LLMAgent:
 
 
     def getReward(self, arm_played):
-        return self.bandit.pull(arm_played)
+        self.reward= self.bandit.pull(arm_played)
+        return self.reward
 
 
         
