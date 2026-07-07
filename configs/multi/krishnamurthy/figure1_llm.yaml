@@ -3,10 +3,10 @@ experiment:
   n_jobs: 4
   output_dir: results/multi/figure1_llm_history_test
   horizon: 100
-  runs: 20
+  runs: 10
   interaction: simultaneous
   order: [ucb1,Greedy, ts ,llm_history]
-  track_other_actions_for: [ucb1, Greedy, ts]
+  track_other_actions_for: [ucb, Greedy, ts]
 
 environment:
   n_arms: 5
