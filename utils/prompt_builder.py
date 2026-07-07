@@ -6,9 +6,9 @@ def build_prompt_krishnamurthy(
     arm_stats,
     other_actions=None,
     scenario="B",
-    framing="N",
-    history="R",
-    cot="N",
+    framing="S",
+    history="S",
+    cot="Ce",
     return_distribution="0",
 ):
     # L1: B/A = buttons / advertisements
