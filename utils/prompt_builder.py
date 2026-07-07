@@ -6,9 +6,9 @@ def build_prompt_krishnamurthy(
     arm_stats,
     other_actions=None,
     scenario="B",
-    framing="N",
-    history="R",
-    cot="N",
+    framing="S",
+    history="S",
+    cot="Ce",
     return_distribution="0",
 ):
     # L1: B/A = buttons / advertisements
@@ -36,71 +36,135 @@ def build_prompt_krishnamurthy(
     if cot not in {"N", "C", "Ce"}:
         cot = "N"
 
-    return_distribution = str(return_distribution)
-    if return_distribution not in {"0", "1", "D"}:
-        return_distribution = "0"
+    return_distribution = str(return_distribution).upper()
+    distribution_mode = return_distribution == "D"
 
     if other_actions is None:
         other_actions = [0] * bandit.n_arms
     elif len(other_actions) < bandit.n_arms:
         other_actions = list(other_actions) + [0] * (bandit.n_arms - len(other_actions))
 
-    system = f"""
-[SYSTEM]
-You are solving a {bandit.n_arms}-armed Bernoulli bandit problem.
-Scenario: {scenario}.
-Framing: {framing}.
-"""
-    if cot == "C":
-        system += "Use chain-of-thought reasoning.\n"
-    elif cot == "Ce":
-        system += "Use chain-of-thought reasoning and explain step-by-step.\n"
-    if return_distribution:
-        system += "Return a distribution over actions instead of a single arm.\n"
-
-    user = f"""
-[USER]
-So far you have played {nb_plays} times.
-"""
-
-    if history == "raw":
-        user += "\nYour history so far:\n"
-        for i in range(bandit.n_arms):
-            pulls = arm_stats[str(i)]["pulls"]
-            reward = arm_stats[str(i)]["reward"]
-            avg = reward / pulls if pulls > 0 else 0.0
-            user += f"- Arm {i}: pulled {pulls} times, average reward {avg:.3f}.\n"
+    if bandit.n_arms == 5:
+        if scenario == "B":
+            choices = ["blue", "green", "red", "yellow", "purple"]
+            action_unit = "button"
+            answer_type = "COLOR"
+        else:
+            choices = ["A", "B", "C", "D", "E"]
+            action_unit = "advertisement"
+            answer_type = "DIST" if distribution_mode else "CHOICE"
     else:
-        total_pulls = sum(arm_stats[str(i)]["pulls"] for i in range(bandit.n_arms))
-        total_reward = sum(arm_stats[str(i)]["reward"] for i in range(bandit.n_arms))
-        avg_reward = total_reward / total_pulls if total_pulls > 0 else 0.0
-        user += f"\nSummarized history: {total_pulls} pulls so far, average reward {avg_reward:.3f}.\n"
-        user += "Include which arms have been pulled more often and which have higher observed reward.\n"
+        choices = [f"arm {i}" for i in range(bandit.n_arms)]
+        action_unit = "arm"
+        answer_type = "DIST" if distribution_mode else "ACTION"
 
-    if other_actions is not None:
-        user += "\nObserved actions by other agents:\n"
-        for i in range(bandit.n_arms):
-            user += f"- Arm {i} selected {other_actions[i]} times by other agents.\n"
+    choice_list = ", ".join(choices)
 
-    if return_distribution:
-        user += "\nReturn a probability distribution over actions as a JSON array."
-        expected_format = "{\n    \"distribution\": [0.0, ..., 1.0],\n    \"explication\": \"your reasoning\"\n}"
+    system = "[SYSTEM]\n"
+    if scenario == "B":
+        if framing == "N":
+            system += (
+                f"You are in a room with {bandit.n_arms} buttons labeled {choice_list}.\n"
+                "Each button is associated with a Bernoulli distribution with a fixed but unknown mean; the means for the buttons could be different.\n"
+                "For each button, when you press it, you will get a reward that is sampled from the button's associated distribution.\n"
+                "At each time step, you can choose any button and receive the reward. Your goal is to maximize the total reward over the time steps.\n"
+                "At each time step, I will show you your past choices and rewards.\n"
+                f"Then you must make the next choice, which must be exactly one of {choice_list}.\n"
+            )
+        else:
+            system += (
+                f"You are a bandit algorithm in a room with {bandit.n_arms} buttons labeled {choice_list}.\n"
+                "Each button is associated with a Bernoulli distribution with a fixed but unknown mean; the means for the buttons could be different.\n"
+                "For each button, when you press it, you will get a reward that is sampled from the button's associated distribution.\n"
+                "At each time step, you can choose any button and receive the reward. Your goal is to maximize the total reward over the time steps.\n"
+                "At each time step, I will show you your past choices and rewards.\n"
+                f"Then you must make the next choice, which must be exactly one of {choice_list}.\n"
+            )
     else:
-        user += "\nWhich arm should be selected next?"
-        expected_format = "{\n    \"action\": 0,\n    \"explication\": \"your reasoning\"\n}"
+        system += (
+            f"You are a recommendation engine that chooses advertisements to display to users when they visit your webpage.\n"
+            f"There are {bandit.n_arms} advertisements you can choose from, named {choice_list}.\n"
+            "When a user visits the webpage you can choose an advertisement to display and you will observe whether the user clicks on the ad or not.\n"
+            "You model this by assuming that each advertisement has a certain click rate and users click on advertisements with their corresponding rates.\n"
+            "You have a budget of 10 users to interact with and your goal is to maximize the total number of clicks during this process.\n"
+            "A good strategy to optimize for clicks in these situations requires balancing exploration and exploitation.\n"
+            "When each user visits the webpage, I will show you a summary of the data you have collected so far.\n"
+            "Then you must choose which advertisement to display.\n"
+        )
 
-    if cot == "Ce":
-        user += "\nPlease reason step-by-step before answering.\n"
+    if distribution_mode:
+        if scenario == "B":
+            format_example = ",".join([f"{name}:n" for name in choices])
+            system += f"You may output a distribution over the {bandit.n_arms} choices formatted EXACTLY like \"{format_example}\".\n"
+        else:
+            format_example = ",".join([f"{name}:n" for name in choices])
+            system += f"You may output a distribution over the {bandit.n_arms} choices formatted EXACTLY like \"{format_example}\".\n"
     else:
-        user += "\nThink carefully before answering.\n"
+        if scenario == "B":
+            system += (
+                f"You must provide your final answer immediately within the tags <Answer>{answer_type}</Answer> where {answer_type} is one of {choice_list} and with no text explanation.\n"
+            )
+        else:
+            system += (
+                f"You must provide your final answer immediately within the tags <Answer>{answer_type}</Answer> where {answer_type} is one of {choice_list} and with no text explanation.\n"
+            )
 
-    user += f"\nRemember:\nReturn ONLY ONE JSON object with keys:\n"
-    if return_distribution:
-        user += f"- distribution (list of {bandit.n_arms} probabilities)\n"
+    user = "[USER]\n"
+    if history == "R":
+        if scenario == "B":
+            user += f"So far you have played {nb_plays} times with the following choices and rewards:\n"
+            for i, name in enumerate(choices):
+                pulls = arm_stats[str(i)]["pulls"]
+                reward = arm_stats[str(i)]["reward"]
+                if pulls > 0:
+                    avg = reward / pulls
+                    user += f"{name} {action_unit}, total reward {reward}, average reward {avg:.2f}\n"
+        else:
+            user += f"So far you have interacted with {nb_plays} users. Here is the data you have collected:\n"
+            for i, name in enumerate(choices):
+                pulls = arm_stats[str(i)]["pulls"]
+                reward = arm_stats[str(i)]["reward"]
+                if pulls > 0:
+                    ctr = reward / pulls
+                    user += f"Advertisement {name} was shown to {pulls} users with an estimated click rate of {ctr:.2f}\n"
+                else:
+                    user += f"Advertisement {name} has not been shown\n"
     else:
-        user += f"- action (0 ... {bandit.n_arms - 1})\n"
-    user += "- explication (string)\nDo not add any text before or after. Do not use markdown.\n"
-    user += "\nExpected format:\n" + expected_format + "\n"
+        if scenario == "B":
+            user += f"So far you have played {nb_plays} times with your past choices and rewards summarized as follows:\n"
+            for i, name in enumerate(choices):
+                pulls = arm_stats[str(i)]["pulls"]
+                reward = arm_stats[str(i)]["reward"]
+                if pulls > 0:
+                    avg = reward / pulls
+                    user += f"{name} {action_unit}: pressed {pulls} times with average reward {avg:.2f}\n"
+                else:
+                    user += f"{name} {action_unit}: pressed 0 times\n"
+        else:
+            user += f"So far you have interacted with {nb_plays} users. Here is a summary of the data you have collected:\n"
+            for i, name in enumerate(choices):
+                pulls = arm_stats[str(i)]["pulls"]
+                reward = arm_stats[str(i)]["reward"]
+                if pulls > 0:
+                    ctr = reward / pulls
+                    user += f"Advertisement {name} was shown to {pulls} users with an estimated click rate of {ctr:.2f}\n"
+                else:
+                    user += f"Advertisement {name} has not been shown\n"
+
+    if other_actions is not None and any(count > 0 for count in other_actions):
+        user += "\nOther agents have selected actions as follows:\n"
+        for i, count in enumerate(other_actions):
+            if count > 0:
+                other_name = choices[i] if i < len(choices) else f"arm {i}"
+                user += f"- {other_name}: selected {count} times by other agents.\n"
+
+    if distribution_mode:
+        user += f"\nWhich {action_unit} will you choose next? Remember, YOU MUST provide your final answer within the tags <Answer>DIST</Answer> where DIST is formatted like \"{format_example}\".\n"
+    else:
+        user += f"\nWhich {action_unit} will you choose next? Remember, YOU MUST provide your final answer within the tags <Answer>{answer_type}</Answer> where {answer_type} is one of {choice_list}.\n"
+
+    if cot in {"C", "Ce"}:
+        user += "Let’s think step by step to make sure we make a good choice.\n"
 
     return system + "\n" + user
 
