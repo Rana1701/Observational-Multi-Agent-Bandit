@@ -141,7 +141,7 @@ def run_batched_experiment(config, model):
                 if cfg.get("class") == "LLM":
                     
                     if t > 98:
-                        print ("Parsing errors", agent.errors)
+                        print ("Parsing errors", agent.error)
                     
                     cfg["_other_action_counts"] = (
                         state["other_action_counts"]
@@ -165,8 +165,8 @@ def run_batched_experiment(config, model):
             model,
             prompts
         )
-        #print("responses : ")
-        #print(responses)
+        print("responses : ")
+        print(responses)
 
         # Application des réponses
         for (state,name,agent),response in zip(

@@ -62,12 +62,11 @@ def run_single_rep(task, shared_model=None):
 
         for t in range(horizon):
             agent.getNextAction()
-            agent.getNextAction()
             reward = agent.reward 
             cumulative_reward += reward
 
             avg_rewards.append(
-                (cumulative_reward ) / (t + 1 + 15)
+                (cumulative_reward ) / (t + 1 +1 )
             )
 
         results[name] = avg_rewards
