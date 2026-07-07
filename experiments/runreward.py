@@ -85,7 +85,7 @@ def run_single_rep(task, shared_model=None):
                     
                     cfg_a["_other_action_counts"] = other_action_counts
                     prompt = build_llm_prompt(cfg_a, agent)
-                    # print(prompt)
+                    print ("the prompt is: ", prompt)
                     action = agent.getNextAction(prompt)
 
                 # ---- normal agent ----
@@ -97,7 +97,7 @@ def run_single_rep(task, shared_model=None):
                     ]
                     action = agent.getNextAction(observed or None)
 
-                reward = bandit.pull(action)
+                reward = agent.reward
                 # print(f"Agent {name} selected action {action} and received reward {reward}")
 
                 current_actions[name] = action

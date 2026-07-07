@@ -15,6 +15,7 @@ class LLMAgent:
     def __init__(self,bandit,  name_parameter="Qwen/Qwen2.5-7B-Instruct", model=None):
 
         self.bandit = bandit
+        self.reward = 0
         self.error = 0 # count parsing errors
         self.explanation = ""
         self.model = model if model is not None else self.charging_model(name_parameter)
@@ -31,6 +32,53 @@ class LLMAgent:
 
         self.cumul_regret = []
         self.t = 0
+
+    def getNextActionFromResponse(self, response_text):
+
+        self.t += 1
+
+        try:
+            if not response_text.endswith("}"):
+                response_text += "}"
+
+            response = self.extract_json(response_text)
+
+        except Exception:
+            self.error += 1
+            response = {
+                "action": 2,
+                "explanation": "parse failed"
+            }
+
+
+        action = response.get("action", 0)
+
+        self.explanation = response.get(
+            "explanation",
+            ""
+        )
+
+
+        step_reward = self.getReward(action)
+
+
+        self.history[str(action)]["pulls"] += 1
+        self.history[str(action)]["reward"] += step_reward
+
+
+        step_regret = self.bandit.regret(action)
+
+        if self.t > 1:
+            self.cumul_regret.append(
+                self.cumul_regret[-1] + step_regret
+            )
+        else:
+            self.cumul_regret.append(step_regret)
+
+
+        return action
+
+
 
     def _clean_response(self, response):
         """Clean LLM response to remove extra markers and formatting."""
@@ -66,9 +114,10 @@ class LLMAgent:
             # Only add closing brace if not already present
             if not response.rstrip().endswith("}"):
                 response += "}"
-
-            print("RAW RESPONSE:")
-            print(response)
+            
+            if self.t < 10: # Print the first few responses for debugging
+                print("RAW RESPONSE:")
+                print(response)
 
         except Exception as e:
             print("GENERATION ERROR:", repr(e))
@@ -109,8 +158,9 @@ class LLMAgent:
         else:
             self.cumul_regret.append(step_regret)
 
-        print(f"Action {action} , Explanation: {self.explanation}")
-        print(f"parse errors: {self.error} ")
+        #print(f"Action {action} , Explanation: {self.explanation}")
+        if self.t >498: 
+            print(f"parse errors: {self.error} ")
         return action
 
     def extract_json(self, response):
@@ -221,7 +271,10 @@ class LLMAgent:
 
 
     def getReward(self, arm_played):
-        return self.bandit.pull(arm_played)
+        self.reward= self.bandit.pull(arm_played)
+        return self.reward
+    
+    
 
 
         
