@@ -1,0 +1,35 @@
+experiment:
+  runs: 20
+  horizon: 100
+  seed: 42
+  n_jobs: 4
+  interaction: simultaneous
+  order: [agent0, agent1, agent2, agent3]
+  output_dir: results/multi/tucb_4agents
+
+environment:
+  n_arms: 4
+  delta: 0.1
+  best_mean: 0.5
+
+agents:
+  - name: agent0
+    class: TUCB
+    observes: [agent1, agent2, agent3]
+    params:
+      nbr_neighbours: 3
+  - name: agent1
+    class: TUCB
+    observes: [agent0, agent2, agent3]
+    params:
+      nbr_neighbours: 3
+  - name: agent2
+    class: TUCB
+    observes: [agent0, agent1, agent3]
+    params:
+      nbr_neighbours: 3
+  - name: agent3
+    class: TUCB
+    observes: [agent0, agent1, agent2]
+    params:
+      nbr_neighbours: 3
