@@ -5,7 +5,7 @@ import numpy as np
 import random
 from vllm import LLM 
 from vllm import SamplingParams 
-
+import re
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from environnement.bernoulli_bandit import BernoulliBandit
@@ -34,50 +34,74 @@ class LLMAgent:
         self.t = 0
 
     def getNextActionFromResponse(self, response_text):
-
         self.t += 1
+        response = None
+        action = None
+        
+        # On stocke d'office l'intégralité de la réponse dans l'explanation
+        self.explanation = response_text
 
+        # 1. Tentative de lecture sous format JSON
         try:
             if not response_text.endswith("}"):
                 response_text += "}"
-
             response = self.extract_json(response_text)
-
+            action = response.get("action", 0)
         except Exception:
-            self.error += 1
-            response = {
-                "action": 2,
-                "explanation": "parse failed"
-            }
+            # Le parsing JSON a échoué, on passe au fallback des balises
+            pass
 
+        # 2. Méthode alternative : Recherche entre les balises <Answer>
+        if action is None:
+            try:
+                # Recherche du texte contenu entre <Answer> et </Answer>
+                match = re.search(r"<Answer>(.*?)</Answer>", response_text, re.DOTALL)
+                
+                if match:
+                    answer_content = match.group(1).strip()
+                    
+                    # Définition de la liste des choix textuels selon la configuration actuelle du bandit
+                    if self.bandit.n_arms == 5:
+                        # Configuration scénario B (Couleurs) ou autre (Lettres)
+                        choices = ["blue", "green", "red", "yellow", "purple"] if hasattr(self, 'scenario') and self.scenario == "B" else ["A", "B", "C", "D", "E"]
+                    else:
+                        choices = [f"arm {i}" for i in range(self.bandit.n_arms)]
 
-        action = response.get("action", 0)
+                    # Si la réponse est textuelle (ex: "blue"), on trouve son index entier
+                    if answer_content in choices:
+                        action = choices.index(answer_content)
+                    
+                    # Si la réponse est directement l'entier sous forme de texte (ex: "3")
+                    elif answer_content.isdigit():
+                        action = int(answer_content)
+                    
+                    # Si le texte de la balise ne correspond à rien de connu
+                    else:
+                        self.error += 1
+                        raise ValueError("Content inside tags does not match any valid action")
+                else:
+                    self.error += 1
+                    raise ValueError("No <Answer> tags found")
 
-        self.explanation = response.get(
-            "explanation",
-            ""
-        )
+            except Exception:
+                # Échec total des deux méthodes (JSON et Balises)
+                self.error += 1
+                action = 2
 
-
+        # 3. Traitement des récompenses et historique (inchangé)
         step_reward = self.getReward(action)
-
 
         self.history[str(action)]["pulls"] += 1
         self.history[str(action)]["reward"] += step_reward
 
-
         step_regret = self.bandit.regret(action)
 
         if self.t > 1:
-            self.cumul_regret.append(
-                self.cumul_regret[-1] + step_regret
-            )
+            self.cumul_regret.append(self.cumul_regret[-1] + step_regret)
         else:
             self.cumul_regret.append(step_regret)
 
-
         return action
-
 
 
     def _clean_response(self, response):
@@ -99,7 +123,7 @@ class LLMAgent:
         try:
             sampling_params = SamplingParams(
                 temperature=0,
-                max_tokens=256,
+                max_tokens=512,
                 top_p=0.9,
                 stop=["}"]
             )

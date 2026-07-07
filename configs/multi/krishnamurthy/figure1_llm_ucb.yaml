@@ -1,9 +1,9 @@
 experiment:
   seed: 40
   n_jobs: 4
-  output_dir: results/multi/figure1_llm_ucb_test
-  horizon: 3
-  runs: 5
+  output_dir: results/multi/figure1_llm_ucb
+  horizon: 500
+  runs: 20
   interaction: sequential
   order: [ucb1,Greedy, ts ,llm_ucb]
 
