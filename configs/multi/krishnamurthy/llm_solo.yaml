@@ -22,7 +22,7 @@ agents:
     class: Greedy
   - name: llm_krishnamurthy
     class: LLM
-    prompt: krishnamurthy
+    prompt: krishnamurthy_solo
     params:
       model: Qwen/Qwen2.5-7B-Instruct
-    prompt_tuple: ["B", "N", "R", "N", "0"]
+    prompt_tuple: ["B", "S", "S", "Ce", "0"]

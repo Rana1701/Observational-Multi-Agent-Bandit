@@ -33,6 +33,53 @@ class LLMAgent:
         self.cumul_regret = []
         self.t = 0
 
+    def getNextActionFromResponse(self, response_text):
+
+        self.t += 1
+
+        try:
+            if not response_text.endswith("}"):
+                response_text += "}"
+
+            response = self.extract_json(response_text)
+
+        except Exception:
+            self.error += 1
+            response = {
+                "action": 2,
+                "explanation": "parse failed"
+            }
+
+
+        action = response.get("action", 0)
+
+        self.explanation = response.get(
+            "explanation",
+            ""
+        )
+
+
+        step_reward = self.getReward(action)
+
+
+        self.history[str(action)]["pulls"] += 1
+        self.history[str(action)]["reward"] += step_reward
+
+
+        step_regret = self.bandit.regret(action)
+
+        if self.t > 1:
+            self.cumul_regret.append(
+                self.cumul_regret[-1] + step_regret
+            )
+        else:
+            self.cumul_regret.append(step_regret)
+
+
+        return action
+
+
+
     def _clean_response(self, response):
         """Clean LLM response to remove extra markers and formatting."""
         import re
@@ -226,6 +273,8 @@ class LLMAgent:
     def getReward(self, arm_played):
         self.reward= self.bandit.pull(arm_played)
         return self.reward
+    
+    
 
 
         
