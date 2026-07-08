@@ -5,7 +5,7 @@ experiment:
   n_jobs: 4
   interaction: sequential
   order: [alphaOptimal, greedy, tucb]
-  output_dir: results/multi/tucb_figure2_alpha_09
+  output_dir: results/multi/krishnamurthy_2024C/figure2/alpha_0001
 
 environment:
   n_arms: 2
@@ -16,7 +16,7 @@ agents:
   - name: alphaOptimal
     class: alphaOptimal
     params:
-      alpha : 0.9
+      alpha : 0.001
   - name: greedy
     class: GreedyFollower
     observes: [alphaOptimal]

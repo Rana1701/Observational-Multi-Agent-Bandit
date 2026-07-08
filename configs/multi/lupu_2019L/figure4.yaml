@@ -3,7 +3,8 @@ experiment:
   horizon: 1000
   seed: 42
   n_jobs: 4
-  output_dir: results/figure4/single_ucb
+  n_agents: 20
+  output_dir: results/multi/krishnamurthy_2024C/figure4
 
 environment:
   n_arms: 10
@@ -11,5 +12,5 @@ environment:
   best_mean: 0.5
 
 agents:
-  - name: ucb
-    class: UCB
+  - name: tucb
+    class: TUCB
