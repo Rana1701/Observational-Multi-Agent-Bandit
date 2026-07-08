@@ -5,7 +5,7 @@ experiment:
   n_jobs: 4
   interaction: sequential
   order: [ucb, greedy, tucb]
-  output_dir: results/multi/tucb_figure1_delta_04
+  output_dir: results/multi/krishnamurthy_2024C/figure1/delta_04
 
 environment:
   n_arms: 2

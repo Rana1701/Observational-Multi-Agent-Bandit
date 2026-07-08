@@ -5,7 +5,7 @@ experiment:
   n_jobs: 4
   interaction: sequential
   input_dir: Target-UCB/Human bandit dataset/cliques/
-  output_dir: results/multi/figure6_tucb_clique
+  output_dir: results/multi/krishnamurthy_2024C/figure6
 
 environment:
   n_arms: 2
