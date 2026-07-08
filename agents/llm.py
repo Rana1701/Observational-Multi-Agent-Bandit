@@ -1,48 +1,131 @@
 import json
+import os
+import sys
 import numpy as np
 import random
 from vllm import LLM 
 from vllm import SamplingParams 
+import re
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from environnement.bernoulli_bandit import BernoulliBandit
+ 
 
 class LLMAgent:
-    def __init__(self, name_parameter="Qwen/Qwen2.5-7B-Instruct", model=None, reward_fn=None):
-        self.reward_fn = reward_fn if reward_fn is not None else self._default_reward_fn
-        
+    def __init__(self,bandit,  name_parameter="Qwen/Qwen2.5-7B-Instruct", model=None):
+
+        self.bandit = bandit
+        self.reward = 0
         self.error = 0 # count parsing errors
         self.explanation = ""
         self.model = model if model is not None else self.charging_model(name_parameter)
         self.target = {}
-        self.history = {"0": {"pulls": 0, "reward": 0}, "1": {"pulls": 0, "reward": 0}}
+        self.history = {str(i): {"pulls": 0, "reward": 0} for i in range(self.bandit.n_arms)}
+
         self.default_prompt = (
-                "You are a multi-armed bandit agent. You have 2 arms to choose from."
-                " Each arm has a certain probability of giving a reward."
-                " Your goal is to maximize your cumulative reward over time."
-                " At each time step, you can observe the previous actions of the other agents,"
-                " but not their rewards."
-                " Based on the actions of the other agents and your own experience,"
-                " you need to decide which arm to pull next."
-                "Please answer in the following JSON format: "
-                "{\"action\": 0 or 1, \"explanation\": \"Your explanation here\"}"
-                "Return ONLY one valid JSON object."
-                "Do not output multiple JSON objects."
-                "Do not use markdown."
-                "Do not write any text before or after."
+                f"You are a multi-armed bandit agent with {self.bandit.n_arms} arms.\n"
+                "Maximize cumulative reward. Base decisions on other agents' observed actions and your experience.\n"
+                "Respond ONLY with valid JSON, nothing else:\n"
+                f'{{\"action\": <int 0 to {self.bandit.n_arms-1}>, \"explication\": \"<reason>\"}}\n'
+                "CRITICAL: Return only ONE JSON object. No markdown, no extra text before/after."
             )
 
         self.cumul_regret = []
         self.t = 0
-        self.delta = 0.2
+
+    def getNextActionFromResponse(self, response_text):
+        self.t += 1
+        response = None
+        action = None
+        
+        # On stocke d'office l'intégralité de la réponse dans l'explanation
+        self.explanation = response_text
+
+        # 1. Tentative de lecture sous format JSON
+        try:
+            if not response_text.endswith("}"):
+                response_text += "}"
+            response = self.extract_json(response_text)
+            action = response.get("action", 0)
+        except Exception:
+            # Le parsing JSON a échoué, on passe au fallback des balises
+            pass
+
+        # 2. Méthode alternative : Recherche entre les balises <Answer>
+        if action is None:
+            try:
+                # Recherche du texte contenu entre <Answer> et </Answer>
+                match = re.search(r"<Answer>(.*?)</Answer>", response_text, re.DOTALL)
+                
+                if match:
+                    answer_content = match.group(1).strip()
+                    
+                    # Définition de la liste des choix textuels selon la configuration actuelle du bandit
+                    if self.bandit.n_arms == 5:
+                        # Configuration scénario B (Couleurs) ou autre (Lettres)
+                        choices = ["blue", "green", "red", "yellow", "purple"] if hasattr(self, 'scenario') and self.scenario == "B" else ["A", "B", "C", "D", "E"]
+                    else:
+                        choices = [f"arm {i}" for i in range(self.bandit.n_arms)]
+
+                    # Si la réponse est textuelle (ex: "blue"), on trouve son index entier
+                    if answer_content in choices:
+                        action = choices.index(answer_content)
+                    
+                    # Si la réponse est directement l'entier sous forme de texte (ex: "3")
+                    elif answer_content.isdigit():
+                        action = int(answer_content)
+                    
+                    # Si le texte de la balise ne correspond à rien de connu
+                    else:
+                        self.error += 1
+                        raise ValueError("Content inside tags does not match any valid action")
+                else:
+                    self.error += 1
+                    raise ValueError("No <Answer> tags found")
+
+            except Exception:
+                # Échec total des deux méthodes (JSON et Balises)
+                self.error += 1
+                action = 2
+
+        # 3. Traitement des récompenses et historique (inchangé)
+        step_reward = self.getReward(action)
+
+        self.history[str(action)]["pulls"] += 1
+        self.history[str(action)]["reward"] += step_reward
+
+        step_regret = self.bandit.regret(action)
+
+        if self.t > 1:
+            self.cumul_regret.append(self.cumul_regret[-1] + step_regret)
+        else:
+            self.cumul_regret.append(step_regret)
+
+        return action
+
+
+    def _clean_response(self, response):
+        """Clean LLM response to remove extra markers and formatting."""
+        import re
+        # Remove markdown markers, system/user markers, etc.
+        response = re.sub(r'\[/?(?:SYSTEM|USER|JSON)\]', '', response)
+        response = re.sub(r'^JSON\s*', '', response, flags=re.MULTILINE)
+        response = re.sub(r'(?:Explanation|explication)\s*[:\-]\s*', 'explanation": "', response, flags=re.IGNORECASE)
+        # Remove leading/trailing whitespace and common junk
+        response = response.strip()
+        return response
 
     def ask(self, prompt):
         if self.model is None:
             print("Model loading failed. Using fallback action.")
-            return {"action": random.choice([0, 1]), "explanation": "no model loaded - fallback action"}
+            return {"action": 0, "explanation": "no model loaded - fallback action"}
 
         try:
             sampling_params = SamplingParams(
-                temperature=0.7,
-                max_tokens=32
+                temperature=0,
+                max_tokens=512,
+                top_p=0.9,
+                stop=["}"]
             )
 
             result = self.model.generate(
@@ -50,21 +133,27 @@ class LLMAgent:
                 sampling_params
             )
 
-            response = result[0].outputs[0].text
-
-            #print("RAW RESPONSE:")
-            #print(response)
+            response = result[0].outputs[0].text.strip()
+            
+            # Only add closing brace if not already present
+            if not response.rstrip().endswith("}"):
+                response += "}"
+            
+            if self.t < 10: # Print the first few responses for debugging
+                print("RAW RESPONSE:")
+                print(response)
 
         except Exception as e:
             print("GENERATION ERROR:", repr(e))
-            return {"action": random.choice([0, 1]), "explanation": "model generation failed"}
+            self.error += 1
+            return {"action": 0, "explanation": "model generation failed"}
 
         try:
             return self.extract_json(response)
         except:
             self.error += 1
             return {
-                "action": random.choice([0, 1]),
+                "action": 0,
                 "explanation": "parse failed"
             }
 
@@ -86,79 +175,130 @@ class LLMAgent:
         self.history[str(action)]["pulls"] += 1
         self.history[str(action)]["reward"] += step_reward
 
-        if action == 0:
-            step_regret = 0
-        else:
-            step_regret = self.delta
+        step_regret = self.bandit.regret(action)
 
         if self.t > 1:
             self.cumul_regret.append(self.cumul_regret[-1] + step_regret)
         else:
             self.cumul_regret.append(step_regret)
 
+        #print(f"Action {action} , Explanation: {self.explanation}")
+        if self.t >498: 
+            print(f"parse errors: {self.error} ")
         return action
 
     def extract_json(self, response):
         import json
         import re
 
-  
-        # 1. EXTRAIRE ACTION (JSON)
-        start = response.find("{")
-        action = None
+        response = response.strip()
 
-        if start != -1:
+        def parse_json_text(text):
+            text = text.replace("'", '"')
+            text = re.sub(r",\s*\}", "}", text)
+            text = re.sub(r",\s*\]", "]", text)
+            # Remove any trailing commas and extra spaces/newlines before closing braces
+            text = re.sub(r"\s*,\s*}", "}", text)
+            text = re.sub(r"\s*}\s*$", "}", text)
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                # Fallback: quote unquoted keys
+                repaired = re.sub(
+                    r"(?<!\")\b(action|explication|explanation|distribution)\b\s*:\s*",
+                    r'"\1": ',
+                    text,
+                )
+                try:
+                    return json.loads(repaired)
+                except json.JSONDecodeError:
+                    return None
+
+        def get_first_brace_block(text):
+            start = text.find("{")
+            if start < 0:
+                return None
             depth = 0
-            for i in range(start, len(response)):
-                if response[i] == "{":
+            for i, ch in enumerate(text[start:], start):
+                if ch == "{":
                     depth += 1
-                elif response[i] == "}":
+                elif ch == "}":
                     depth -= 1
                     if depth == 0:
-                        try:
-                            obj = json.loads(response[start:i+1])
-                            if "action" in obj:
-                                action = obj.get("action")
-                                break
-                        except:
-                            pass
+                        return text[start:i+1]
+            return text[start:]
 
-        if action is None:
-            action = random.choice([0, 1])
+        # Try to parse the first balanced JSON block
+        block = get_first_brace_block(response)
+        if block:
+            obj = parse_json_text(block)
+            if isinstance(obj, dict):
+                action = obj.get("action")
+                explanation = obj.get("explication") or obj.get("explanation")
+                if isinstance(action, int) and 0 <= action < self.bandit.n_arms:
+                    if explanation is None:
+                        explanation = "missing explication"
+                    return {"action": action, "explanation": str(explanation)}
 
-   
-        # 2. EXTRAIRE EXPLICATION (TEXT HEURISTIC)
-        exp = ""
+            # If the block is incomplete, try to repair it
+            if not block.rstrip().endswith("}"):
+                repaired = block
+                if repaired.count('"') % 2 != 0:
+                    repaired += '"'
+                repaired += "}"
+                obj = parse_json_text(repaired)
+                if isinstance(obj, dict):
+                    action = obj.get("action")
+                    explanation = obj.get("explication") or obj.get("explanation")
+                    if isinstance(action, int) and 0 <= action < self.bandit.n_arms:
+                        if explanation is None:
+                            explanation = "missing explication"
+                        return {"action": action, "explanation": str(explanation)}
 
-        match = re.search(r"(explication|explanation)\s*:\s*(.*)", response, re.IGNORECASE | re.DOTALL)
+        # If JSON parsing fails, try a looser key/value extraction
+        action = None
+        explanation = None
 
-        if match:
-            exp = match.group(2).strip()
+        m = re.search(r"\baction\b\s*(?:[:=]\s*)?(\d+)", response, re.I)
+        if m:
+            action = int(m.group(1))
+
+        m = re.search(r"\b(explication|explanation)\b\s*(?:[:=\-]\s*)?[\'\"]([^\'\"]+)[\'\"]", response, re.I)
+        if m:
+            explanation = m.group(2).strip()
         else:
-            exp = "no explanation found"
+            m = re.search(r"\b(explication|explanation)\b\s*(?:[:=\-]\s*)?([^}]+?)(?:[,}]|$)", response, re.I)
+            if m:
+                explanation = m.group(2).strip().strip('\'"')
 
-        return {
-            "action": action,
-            "explication": exp
-        }
+        if action is not None:
+            if explanation is None:
+                # Try to extract from "Explanation: " style
+                m = re.search(r"(?:explication|explanation)\s*[:\-]\s*(.+?)(?:[,}]|$)", response, re.I)
+                if m:
+                    explanation = m.group(1).strip().strip('\'"')
+            if explanation is None:
+                explanation = "missing explication"
+            if 0 <= action < self.bandit.n_arms:
+                return {"action": action, "explanation": explanation}
+
+        self.error += 1
+        return {"action": 0, "explanation": "parse failed"}
 
     def charging_model(self, name_parameter="Qwen/Qwen2.5-7B-Instruct"):
         try:
             return LLM(model=name_parameter)
-        except Exception:
+        except Exception as e:
+            print("Erreur lors du chargement du modèle :")
+            print(repr(e))
             return None
 
-    def _default_reward_fn(self, arm_played):
-        win_rate = [0.6, 0.4]
-        pull = np.random.rand()
-        if arm_played == 0 and pull < win_rate[0]:
-            return 1
-        elif arm_played == 1 and pull < win_rate[1]:
-            return 1
-        return 0
 
     def getReward(self, arm_played):
-        return self.reward_fn(arm_played)
+        self.reward= self.bandit.pull(arm_played)
+        return self.reward
+    
+    
 
 
         
@@ -168,7 +308,7 @@ def main():
     llm = LLM(model="Qwen/Qwen2.5-7B-Instruct")
     
     '''Runs a LLM agent for 100 plays'''
-    agent = LLMAgent(model=llm)  
+    agent = LLMAgent(BernoulliBandit(n_arms=2, best_mean=0.5, delta=0.2), model=llm)  
     
     import time
 
