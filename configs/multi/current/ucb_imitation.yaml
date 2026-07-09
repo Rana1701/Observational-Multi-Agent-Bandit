@@ -1,12 +1,11 @@
 experiment:
   seed: 40
   n_jobs: 4
-  output_dir: results/multi/figure1_llm_history_test
-  horizon: 100
-  runs: 10
-  interaction: simultaneous
-  order: [ucb1,Greedy, ts ,llm_history]
-  track_other_actions_for: [ucb, Greedy, ts]
+  output_dir: results/multi/current/ucb_imitation
+  horizon: 500
+  runs: 20
+  interaction: sequential
+  order: [ucb1,Greedy, ts ,llm_ucb]
 
 environment:
   n_arms: 5
@@ -21,8 +20,8 @@ agents:
     class: TS
   - name: Greedy
     class: Greedy
-  - name: llm_history
+  - name: llm_ucb
     class: LLM
-    prompt: history
+    prompt: ucb_history
     params:
       model: Qwen/Qwen2.5-7B-Instruct

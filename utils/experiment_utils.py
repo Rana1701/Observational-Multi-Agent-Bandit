@@ -131,24 +131,6 @@ def get_llm_model_name(cfg):
 
     return DEFAULT_LLM
 
-def run_single_solo(cfg, run_idx, shared_model=None):
-    exp = cfg["experiment"]
-
-    seed = run_seed(exp.get("seed"), run_idx)
-    bandit = build_bandit(cfg["environment"], seed)
-
-    agent = create_agent(
-        AGENTS[cfg["agent"]],
-        bandit,
-        cfg.get("agent_params"),
-        shared_model=shared_model,
-    )
-
-    for _ in range(exp["horizon"]):
-        agent.getNextAction()
-
-    return np.asarray(agent.cumul_regret, dtype=float)
-
 def run_single_multi(cfg, run_idx, shared_model=None):
     exp = cfg["experiment"]
     seed = run_seed(exp.get("seed"), run_idx)
@@ -257,44 +239,31 @@ def parallel_runs(run_fn, cfg, n_jobs):
     return results
 
 
-def save_solo_results(regrets, cfg):
-    output_dir = Path(
-        cfg["experiment"].get(
-            "output_dir",
-            f"results/{cfg['agent'].lower()}",
-        )
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    regrets = np.asarray(regrets)
-    np.save(output_dir / "regrets.npy", regrets)
-    np.save(output_dir / "mean_regret.npy", regrets.mean(axis=0))
-    np.save(output_dir / "std_regret.npy", regrets.std(axis=0))
-
-    with open(output_dir / "config.yaml", "w") as f:
-        yaml.safe_dump(cfg, f)
-
-    print(f"Results saved to {output_dir}")
-
-
-def save_multi_results(all_regrets, cfg):
+def save_multi_results(all_runs, cfg):
     output_dir = Path(cfg["experiment"]["output_dir"])
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    agent_names = list(next(iter(all_regrets)).keys())
-    stacked = {}
+    first_run = next(iter(all_runs))
+    agent_names = list(first_run["cumulated_regrets"].keys())
+
+    metrics_map = {
+        "cumulated_regrets": "regret",
+        "time_averaged_rewards": "reward"
+    }
 
     for name in agent_names:
-        agent_runs = np.asarray([run[name] for run in all_regrets])
         agent_dir = output_dir / name
         agent_dir.mkdir(parents=True, exist_ok=True)
 
-        np.save(agent_dir / "regrets.npy", agent_runs)
-        np.save(agent_dir / "mean_regret.npy", agent_runs.mean(axis=0))
-        np.save(agent_dir / "std_regret.npy", agent_runs.std(axis=0))
-        stacked[name] = agent_runs
+        for dict_key, file_prefix in metrics_map.items():
+            agent_runs = np.asarray([run[dict_key][name] for run in all_runs])
+
+            np.save(agent_dir / f"{file_prefix}s.npy", agent_runs)
+            np.save(agent_dir / f"mean_{file_prefix}.npy", agent_runs.mean(axis=0))
+            np.save(agent_dir / f"std_{file_prefix}.npy", agent_runs.std(axis=0))
 
     with open(output_dir / "config.yaml", "w") as f:
         yaml.safe_dump(cfg, f)
 
     print(f"Results saved to {output_dir} for agents: {', '.join(agent_names)}")
+

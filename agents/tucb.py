@@ -14,7 +14,7 @@ class TUCB:
 
         self.bandit = bandit
         self.delta = bandit.delta if hasattr(bandit, "delta") else delta
-
+        self.reward = 0
         self.neighbours = nbr_neighbours
 
         # stats (K-armed compatible)
@@ -63,7 +63,8 @@ class TUCB:
             action = int(np.argmax(Q))
 
         reward = self.bandit.pull(action)
-
+        self.reward = reward
+        
         # update stats
         self.nb_plays[action] += 1
         self.avg_reward[action] += (
