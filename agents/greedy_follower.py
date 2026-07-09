@@ -13,7 +13,7 @@ class GreedyFollower:
         self.target_plays = [0] * self.K
 
         self.nb_plays = [0] * self.K
-
+        self.reward = 0
         self.t = 0
         self.cumul_regret = []
 
@@ -40,7 +40,7 @@ class GreedyFollower:
             ]
             action = random.choice(candidates)
 
-        self.bandit.pull(action)
+        self.reward = self.bandit.pull(action)
         self.nb_plays[action] += 1
 
         step_regret = self.bandit.regret(action)

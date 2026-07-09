@@ -9,33 +9,36 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def load_regrets(result_dir):
+# Modified to accept a dynamic file prefix ('regret' or 'reward')
+def load_data(result_dir, filename_prefix):
     result_dir = Path(result_dir)
-    regrets_path = result_dir / "regrets.npy"
+    data_path = result_dir / f"{filename_prefix}s.npy"
 
-    if regrets_path.exists():
-        return np.load(regrets_path)
+    if data_path.exists():
+        return np.load(data_path)
 
-    mean_path = result_dir / "mean_regret.npy"
+    mean_path = result_dir / f"mean_{filename_prefix}.npy"
     if mean_path.exists():
         return np.load(mean_path)[None, :]
 
-    raise FileNotFoundError(f"No regrets.npy found in {result_dir}")
+    raise FileNotFoundError(f"No {filename_prefix}s.npy found in {result_dir}")
 
 
-def discover_agents(result_dir):
+# Modified to search dynamically for the targeted metric file
+def discover_agents(result_dir, filename_prefix):
     """
     Scans recursively the input folder and its sub folders
-    to find the 'regrets.npy' files
+    to find the data files
     """
     result_dir = Path(result_dir)
+    target_file = f"{filename_prefix}s.npy"
     
-    dirs_with_regrets = [p.parent for p in result_dir.rglob("regrets.npy")]
+    dirs_with_data = [p.parent for p in result_dir.rglob(target_file)]
     
-    if dirs_with_regrets:
-        return sorted(list(set(dirs_with_regrets))) # set() évite les doublons potentiels
+    if dirs_with_data:
+        return sorted(list(set(dirs_with_data))) # set() avoids potential duplicates
         
-    raise FileNotFoundError(f"No result files found in {result_dir}")
+    raise FileNotFoundError(f"No {target_file} files found in {result_dir}")
 
 
 def plot_series(ax, regrets, label, color=None, linestyle=None, alpha=0.2):
@@ -68,8 +71,22 @@ def plot_series(ax, regrets, label, color=None, linestyle=None, alpha=0.2):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Plot cumulative regret from saved experiment results."
+        description="Plot cumulative regret or time-averaged reward from saved experiment results."
     )
+    
+    # Added required mutually exclusive group for metric target choice
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--reward",
+        action="store_true",
+        help="Plot time-averaged reward",
+    )
+    group.add_argument(
+        "--regret",
+        action="store_true",
+        help="Plot cumulative regret",
+    )
+
     parser.add_argument(
         "--input",
         nargs="+",
@@ -89,7 +106,7 @@ def main():
     )
     parser.add_argument(
         "--title",
-        default="Cumulative Regret",
+        default=None, # Changed default to None to adapt dynamically below
         help="Plot title",
     )
     parser.add_argument(
@@ -104,6 +121,18 @@ def main():
         help="If true, groups same sub-folders by color and agents by distinct linestyles.",
     )
     args = parser.parse_args()
+
+    # Configure plot labels and dynamic prefixes based on the argument flag
+    if args.regret:
+        filename_prefix = "regret"
+        y_label = "Cumulative Regret"
+        default_title = "Cumulative Regret"
+    else:
+        filename_prefix = "reward"
+        y_label = "Time-averaged Reward"
+        default_title = "Time-averaged Reward"
+
+    plot_title = args.title if args.title is not None else default_title
 
     min, max = args.min, args.max
     fig, ax = plt.subplots(figsize=(12, 8))
@@ -123,7 +152,8 @@ def main():
 
     for input_path in args.input:
         input_path = Path(input_path)
-        agent_dirs = discover_agents(input_path)
+        # Pass the dynamic file prefix down to find matching logs
+        agent_dirs = discover_agents(input_path, filename_prefix)
 
         for agent_dir in agent_dirs:
             color = None
@@ -152,17 +182,18 @@ def main():
                 else:
                     label = input_path.name
 
-            regrets = load_regrets(agent_dir)
+            # Load the requested metric type dataset
+            regrets = load_data(agent_dir, filename_prefix)
             plot_series(ax, regrets, label, color=color, linestyle=linestyle)
             label_idx += 1
             plotted += 1
 
     if plotted == 0:
-        raise SystemExit("No data plotted. Check --input paths.")
+        raise SystemExit(f"No data plotted. Check --input paths for {filename_prefix}s.npy.")
 
     ax.set_xlabel("Time")
-    ax.set_ylabel("Cumulative Regret")
-    ax.set_title(args.title)
+    ax.set_ylabel(y_label) 
+    ax.set_title(plot_title)
     ax.set_ylim(min, max)
     ax.legend()
     ax.grid(True, alpha=0.3)

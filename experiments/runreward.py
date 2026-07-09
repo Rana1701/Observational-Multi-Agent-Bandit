@@ -98,10 +98,7 @@ def run_single_rep(task, shared_model=None):
                     action = agent.getNextAction(observed or None)
 
                 reward = agent.reward
-                # print(f"Agent {name} selected action {action} and received reward {reward}")
-
                 current_actions[name] = action
-
                 cumulative[name] += reward
                 rewards_ts[name].append(cumulative[name] / (t + 1))
 
@@ -126,8 +123,7 @@ def run_single_rep(task, shared_model=None):
 
             # env step AFTER all actions
             for name in order:
-                reward = bandit.pull(actions[name])
-
+                reward = agents[name].reward
                 cumulative[name] += reward
                 rewards_ts[name].append(cumulative[name] / (t + 1))
 

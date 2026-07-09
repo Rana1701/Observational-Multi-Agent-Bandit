@@ -3,6 +3,7 @@ experiment:
   horizon: 1000
   seed: 42
   n_agents: 11
+  interaction: simultaneous
   output_dir: results/multi/krishnamurthy_2024C/figure3
 
 environment:
