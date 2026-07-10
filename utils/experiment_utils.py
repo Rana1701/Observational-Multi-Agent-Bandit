@@ -131,6 +131,7 @@ def get_llm_model_name(cfg):
 
     return DEFAULT_LLM
 
+""""
 def run_single_multi(cfg, run_idx, shared_model=None):
     exp = cfg["experiment"]
     seed = run_seed(exp.get("seed"), run_idx)
@@ -219,6 +220,7 @@ def run_single_multi(cfg, run_idx, shared_model=None):
         regrets[name] = np.asarray(agents[name].cumul_regret, dtype=float)
 
     return regrets
+"""
 
 def parallel_runs(run_fn, cfg, n_jobs):
     runs = cfg["experiment"]["runs"]
