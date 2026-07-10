@@ -1,10 +1,9 @@
 experiment:
   seed: 40
   n_jobs: 4
-  output_dir: results/multi/figure1
-  horizon: 100
-  runs: 10
-  interaction: simultaneous
+  output_dir: results/multi/krishnamurthy_2024C/figure1
+  horizon: 500
+  runs: 20
   order: [ucb1,Greedy, ts ,llm_history]
   track_other_actions_for: [ucb, Greedy, ts]
 
