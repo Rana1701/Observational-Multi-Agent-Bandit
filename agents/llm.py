@@ -16,7 +16,7 @@ class LLMAgent:
 
         self.bandit = bandit
         self.reward = 0
-        self.error = 0 # count parsing errors
+        self.error = 0 
         self.explanation = ""
         self.model = model if model is not None else self.charging_model(name_parameter)
         self.target = {}
@@ -33,25 +33,25 @@ class LLMAgent:
         self.cumul_regret = []
         self.t = 0
 
-    def getNextActionFromResponse(self, response_text):
+    #extract response and updates stats 
+    def extract_reponse(self, response_text):
         self.t += 1
         response = None
         action = None
-        
-        # On stocke d'office l'intégralité de la réponse dans l'explanation
+        colors = ["blue","green","red","yellow","purple","orange","black","white"]
+
         self.explanation = response_text
 
-        # 1. Tentative de lecture sous format JSON
+        # 1. JSON format case
         try:
             if not response_text.endswith("}"):
                 response_text += "}"
             response = self.extract_json(response_text)
             action = response.get("action", 0)
         except Exception:
-            # Le parsing JSON a échoué, on passe au fallback des balises
             pass
 
-        # 2. Méthode alternative : Recherche entre les balises <Answer>
+        # 2. <Answer><Answer> Format case
         if action is None:
             try:
                 # Recherche du texte contenu entre <Answer> et </Answer>
@@ -60,14 +60,9 @@ class LLMAgent:
                 if match:
                     answer_content = match.group(1).strip()
                     
-                    # Définition de la liste des choix textuels selon la configuration actuelle du bandit
-                    if self.bandit.n_arms == 5:
-                        # Configuration scénario B (Couleurs) ou autre (Lettres)
-                        choices = ["blue", "green", "red", "yellow", "purple"] if hasattr(self, 'scenario') and self.scenario == "B" else ["A", "B", "C", "D", "E"]
-                    else:
-                        choices = [f"arm {i}" for i in range(self.bandit.n_arms)]
+                    choices = colors[:self.bandit.n_arms]
 
-                    # Si la réponse est textuelle (ex: "blue"), on trouve son index entier
+                    # Convert color to its index
                     if answer_content in choices:
                         action = choices.index(answer_content)
                     
@@ -77,16 +72,14 @@ class LLMAgent:
                     
                     # Si le texte de la balise ne correspond à rien de connu
                     else:
-                        self.error += 1
                         raise ValueError("Content inside tags does not match any valid action")
                 else:
-                    self.error += 1
                     raise ValueError("No <Answer> tags found")
 
             except Exception:
-                # Échec total des deux méthodes (JSON et Balises)
                 self.error += 1
                 action = 2
+                print(f"Unrecognized answer content: {answer_content}. Defaulting to action 0. Parsing errors = {self.error}")
 
         # 3. Traitement des récompenses et historique (inchangé)
         step_reward = self.getReward(action)
@@ -103,17 +96,6 @@ class LLMAgent:
 
         return action
 
-
-    def _clean_response(self, response):
-        """Clean LLM response to remove extra markers and formatting."""
-        import re
-        # Remove markdown markers, system/user markers, etc.
-        response = re.sub(r'\[/?(?:SYSTEM|USER|JSON)\]', '', response)
-        response = re.sub(r'^JSON\s*', '', response, flags=re.MULTILINE)
-        response = re.sub(r'(?:Explanation|explication)\s*[:\-]\s*', 'explanation": "', response, flags=re.IGNORECASE)
-        # Remove leading/trailing whitespace and common junk
-        response = response.strip()
-        return response
 
     def ask(self, prompt):
         if self.model is None:
@@ -149,7 +131,7 @@ class LLMAgent:
             return {"action": 0, "explanation": "model generation failed"}
 
         try:
-            return self.extract_json(response)
+            return self.extract_reponse(response)
         except:
             self.error += 1
             return {
@@ -186,104 +168,6 @@ class LLMAgent:
         if self.t >498: 
             print(f"parse errors: {self.error} ")
         return action
-
-    def extract_json(self, response):
-        import json
-        import re
-
-        response = response.strip()
-
-        def parse_json_text(text):
-            text = text.replace("'", '"')
-            text = re.sub(r",\s*\}", "}", text)
-            text = re.sub(r",\s*\]", "]", text)
-            # Remove any trailing commas and extra spaces/newlines before closing braces
-            text = re.sub(r"\s*,\s*}", "}", text)
-            text = re.sub(r"\s*}\s*$", "}", text)
-            try:
-                return json.loads(text)
-            except json.JSONDecodeError:
-                # Fallback: quote unquoted keys
-                repaired = re.sub(
-                    r"(?<!\")\b(action|explication|explanation|distribution)\b\s*:\s*",
-                    r'"\1": ',
-                    text,
-                )
-                try:
-                    return json.loads(repaired)
-                except json.JSONDecodeError:
-                    return None
-
-        def get_first_brace_block(text):
-            start = text.find("{")
-            if start < 0:
-                return None
-            depth = 0
-            for i, ch in enumerate(text[start:], start):
-                if ch == "{":
-                    depth += 1
-                elif ch == "}":
-                    depth -= 1
-                    if depth == 0:
-                        return text[start:i+1]
-            return text[start:]
-
-        # Try to parse the first balanced JSON block
-        block = get_first_brace_block(response)
-        if block:
-            obj = parse_json_text(block)
-            if isinstance(obj, dict):
-                action = obj.get("action")
-                explanation = obj.get("explication") or obj.get("explanation")
-                if isinstance(action, int) and 0 <= action < self.bandit.n_arms:
-                    if explanation is None:
-                        explanation = "missing explication"
-                    return {"action": action, "explanation": str(explanation)}
-
-            # If the block is incomplete, try to repair it
-            if not block.rstrip().endswith("}"):
-                repaired = block
-                if repaired.count('"') % 2 != 0:
-                    repaired += '"'
-                repaired += "}"
-                obj = parse_json_text(repaired)
-                if isinstance(obj, dict):
-                    action = obj.get("action")
-                    explanation = obj.get("explication") or obj.get("explanation")
-                    if isinstance(action, int) and 0 <= action < self.bandit.n_arms:
-                        if explanation is None:
-                            explanation = "missing explication"
-                        return {"action": action, "explanation": str(explanation)}
-
-        # If JSON parsing fails, try a looser key/value extraction
-        action = None
-        explanation = None
-
-        m = re.search(r"\baction\b\s*(?:[:=]\s*)?(\d+)", response, re.I)
-        if m:
-            action = int(m.group(1))
-
-        m = re.search(r"\b(explication|explanation)\b\s*(?:[:=\-]\s*)?[\'\"]([^\'\"]+)[\'\"]", response, re.I)
-        if m:
-            explanation = m.group(2).strip()
-        else:
-            m = re.search(r"\b(explication|explanation)\b\s*(?:[:=\-]\s*)?([^}]+?)(?:[,}]|$)", response, re.I)
-            if m:
-                explanation = m.group(2).strip().strip('\'"')
-
-        if action is not None:
-            if explanation is None:
-                # Try to extract from "Explanation: " style
-                m = re.search(r"(?:explication|explanation)\s*[:\-]\s*(.+?)(?:[,}]|$)", response, re.I)
-                if m:
-                    explanation = m.group(1).strip().strip('\'"')
-            if explanation is None:
-                explanation = "missing explication"
-            if 0 <= action < self.bandit.n_arms:
-                return {"action": action, "explanation": explanation}
-
-        self.error += 1
-        return {"action": 0, "explanation": "parse failed"}
 
     def charging_model(self, name_parameter="Qwen/Qwen2.5-7B-Instruct"):
         try:

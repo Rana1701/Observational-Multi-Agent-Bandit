@@ -52,8 +52,7 @@ PROMPT_BUILDERS = {
     "ucb_history": build_prompt_ucb_history,
     "exploit": build_prompt_exploit,
     "explore": build_prompt_explore,
-    "krishnamurthy_solo": build_prompt_krishnamurthy,
-    "krishnamurthy_multi": build_prompt_krishnamurthy,
+    "krishnamurthy": build_prompt_krishnamurthy,
 }
 
 
@@ -89,7 +88,6 @@ def uses_llm(cfg):
         return True
     return any(a.get("class") == "LLM" for a in cfg.get("agents", []))
 
-
 def build_llm_prompt(agent_cfg, agent):
     prompt_name = agent_cfg.get("prompt", "default")
     builder = PROMPT_BUILDERS.get(prompt_name)
@@ -102,16 +100,9 @@ def build_llm_prompt(agent_cfg, agent):
                          agent_cfg.get("prompt_tuple", [])[0], agent_cfg.get("prompt_tuple", [])[1],
                          agent_cfg.get("prompt_tuple", [])[2], agent_cfg.get("prompt_tuple", [])[3],
                          agent_cfg.get("prompt_tuple", [])[4])
-    
-    if prompt_name == "krishnamurthy_multi":
-        other_actions = agent_cfg.get("_other_action_counts", None)
-        return builder(agent.bandit, agent.t, agent.history, other_actions,
-                         agent_cfg.get("prompt_tuple", [])[0], agent_cfg.get("prompt_tuple", [])[1],
-                         agent_cfg.get("prompt_tuple", [])[2], agent_cfg.get("prompt_tuple", [])[3],
-                         agent_cfg.get("prompt_tuple", [])[4])
 
     other_actions = agent_cfg.get("_other_action_counts", None)
-    return builder(agent.bandit, agent.t, agent.history, other_actions)
+    return builder(agent.bandit, agent.t, agent.history, other_actions, horizon=agent_cfg.get("horizon", 500))
 
 DEFAULT_LLM = "Qwen/Qwen2.5-7B-Instruct"
 
