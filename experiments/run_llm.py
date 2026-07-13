@@ -20,69 +20,55 @@ from utils.experiment_utils import (
     save_multi_results,
 )
 
+
 def batch_generate(model, prompts):
-    """Generate multiple LLM responses in parallel."""
+    """Generate multiple LLM responses in one vLLM call."""
     if not prompts:
         return []
 
-    sampling_params = SamplingParams(
+    params = SamplingParams(
         temperature=0,
-        max_tokens=64,
+        max_tokens=1024,
         top_p=0.9,
-        stop=["}"],
+        stop=["</Answer>"]
     )
 
     outputs = model.generate(
         prompts,
-        sampling_params
+        params
     )
 
     responses = []
-    for output in outputs:
-        text = output.outputs[0].text.strip()
-
-        if not text.endswith("}"):
-            text += "}"
-
+    for out in outputs:
+        text = out.outputs[0].text.strip()
+        if not text.endswith("</Answer>"):
+            text += "</Answer>"
         responses.append(text)
 
     return responses
 
 
-def run_single_rep(task, shared_model=None):
-    run_idx, cfg = task
-    probs = cfg["environment"].get("probs", None)
+def init_run(cfg, run_idx, shared_model=None):
+    """Initialize one experiment run."""
     exp = cfg["experiment"]
-
     seed = run_seed(exp.get("seed"), run_idx)
+
     random.seed(seed)
     np.random.seed(seed)
 
-    agent_cfgs = cfg["agents"]
-    order = exp.get("order") or [a["name"] for a in agent_cfgs]
-    horizon = exp["horizon"]
+    bandit = build_bandit(
+        cfg["environment"],
+        seed
+    )
 
-    out = {
-        "time_averaged_rewards": {},
-        "cumulated_regrets": {}
-    }
+    order = exp.get("order") or [
+        a["name"] for a in cfg["agents"]
+    ]
 
     agents = {}
     cfg_by_name = {}
 
-    if probs is not None:
-        max_theoretical_reward = np.max(probs)
-    else:
-        max_theoretical_reward = cfg["environment"].get("best_mean", 0.9)
-
-    global_history = {name: [] for name in order}
-
-    bandit = build_bandit(cfg["environment"], seed)
-    n_arms = bandit.n_arms
-
-    other_action_counts = [0] * n_arms
-
-    for a in agent_cfgs:
+    for a in cfg["agents"]:
         name = a["name"]
         cfg_by_name[name] = a
 
@@ -90,248 +76,343 @@ def run_single_rep(task, shared_model=None):
             AGENTS[a["class"]],
             bandit,
             a.get("params"),
-            shared_model=shared_model,
+            shared_model=shared_model
         )
 
-    cumulative_reward = {name: 0.0 for name in order}
-    cumulative_regret = {name: 0.0 for name in order}
+    best_reward = (
+        np.max(bandit.probs)
+        if hasattr(bandit, "probs")
+        else cfg["environment"].get("best_mean", 0.9)
+    )
 
-    rewards_ts = {name: [] for name in order}
-    regrets_ts = {name: [] for name in order}
+    return {
+        "bandit": bandit,
+        "agents": agents,
+        "cfg": cfg_by_name,
+        "order": order,
+        "history": {n: [] for n in order},
+        "other_counts": [0] * bandit.n_arms,
+        "reward": {n: 0.0 for n in order},
+        "regret": {n: 0.0 for n in order},
+        "rewards_ts": {n: [] for n in order},
+        "regrets_ts": {n: [] for n in order},
+        "best": best_reward
+    }
 
-    # Main time loop
+
+def run_single_rep(task, shared_model=None):
+    """Run one experiment replica (used for non LLM experiments)."""
+    run_idx, cfg = task
+    state = init_run(
+        cfg,
+        run_idx,
+        shared_model
+    )
+
+    horizon = cfg["experiment"]["horizon"]
+
     for t in range(horizon):
-        current_actions = {}
+        actions = {}
 
-        for a in agent_cfgs:
-            name = a["name"]
-            agent = agents[name]
+        for name in state["order"]:
+            agent = state["agents"][name]
+            agent_cfg = state["cfg"][name]
 
-            if a.get("class") == "LLM":
-                cfg_by_name[name]["_other_action_counts"] = other_action_counts.copy()
-
-                prompt = build_llm_prompt(
-                    cfg_by_name[name],
-                    agent
+            if agent_cfg.get("class") == "LLM":
+                agent_cfg["_other_action_counts"] = (
+                    state["other_counts"].copy()
                 )
 
-                action = agent.getNextAction(prompt)
+                action = agent.getNextAction(
+                    build_llm_prompt(
+                        agent_cfg,
+                        agent
+                    )
+                )
 
-            elif a.get("observes"):
-                observed = [
-                    global_history[o][t]
-                    for o in a.get("observes", [])
-                    if o in global_history and len(global_history[o]) > t
+            elif agent_cfg.get("observes"):
+                obs = [
+                    state["history"][o][t]
+                    for o in agent_cfg["observes"]
+                    if len(state["history"][o]) > t
                 ]
 
-                action = agent.getNextAction(observed or None)
+                action = agent.getNextAction(
+                    obs or None
+                )
 
             else:
                 action = agent.getNextAction()
 
-            current_actions[name] = action
-            global_history[name].append(action)
+            actions[name] = action
+            state["history"][name].append(action)
 
             reward = agent.reward
 
-            cumulative_reward[name] += reward
-            rewards_ts[name].append(
-                cumulative_reward[name] / (t + 1)
+            state["reward"][name] += reward
+            state["rewards_ts"][name].append(
+                state["reward"][name] / (t + 1)
             )
 
-            if hasattr(bandit, "regret"):
-                cumulative_regret[name] += bandit.regret(action)
-            else:
-                expected_reward = bandit.probs[action]
-                cumulative_regret[name] += (
-                    max_theoretical_reward - expected_reward
-                )
-
-            regrets_ts[name].append(
-                cumulative_regret[name]
+            state["regret"][name] += (
+                state["bandit"].regret(action)
+                if hasattr(state["bandit"], "regret")
+                else state["best"] - state["bandit"].probs[action]
             )
 
-        # Update observed actions after all agents have played
-        for name, action in current_actions.items():
-            if name in exp.get("track_other_actions_for", []):
-                if 0 <= action < len(other_action_counts):
-                    other_action_counts[action] += 1
-
-    for name in order:
-        out["time_averaged_rewards"][name] = np.array(
-            rewards_ts[name]
-        )
-
-        out["cumulated_regrets"][name] = np.array(
-            regrets_ts[name]
-        )
-
-    # Optimal baseline
-    if exp.get("add_opt", False):
-        opt_cum = 0.0
-        opt_curve = []
-
-        for t in range(horizon):
-            opt_cum += max_theoretical_reward
-            opt_curve.append(
-                opt_cum / (t + 1)
+            state["regrets_ts"][name].append(
+                state["regret"][name]
             )
 
-        out["time_averaged_rewards"]["OPT"] = np.array(opt_curve)
-        out["cumulated_regrets"]["OPT"] = np.zeros(horizon)
+        for name in cfg["experiment"].get("track_other_actions_for", []):
+            if name in actions:
+                state["other_counts"][actions[name]] += 1
 
-    return out
+    return format_result(state, cfg)
 
-def init_batched_runs(config, shared_model):
-    """Initialize experiment replicas."""
-    exp = config["experiment"]
+def init_batched_runs(cfg, model):
+    """Initialize all runs sharing the same LLM."""
     states = []
 
-    for run_idx in range(exp.get("runs", 20)):
-        seed = run_seed(exp.get("seed"), run_idx)
-        random.seed(seed)
-        np.random.seed(seed)
-
-        bandit = build_bandit(config["environment"], seed)
-        order = exp.get("order") or [a["name"] for a in config["agents"]]
-
-        agents = {}
-        cfg_by_name = {}
-
-        for a in config["agents"]:
-            name = a["name"]
-            cfg_by_name[name] = a
-            agents[name] = create_agent(
-                AGENTS[a["class"]],
-                bandit,
-                a.get("params"),
-                shared_model=shared_model,
+    for run_idx in range(cfg["experiment"].get("runs", 20)):
+        states.append(
+            init_run(
+                cfg,
+                run_idx,
+                model
             )
-
-        states.append({
-            "bandit": bandit,
-            "agents": agents,
-            "cfg": cfg_by_name,
-            "order": order,
-            "history": {n: [] for n in order},
-            "other_counts": [0] * bandit.n_arms,
-            "actions": {},
-            "reward": {n: 0.0 for n in order},
-            "regret": {n: 0.0 for n in order},
-            "rewards_ts": {n: [] for n in order},
-            "regrets_ts": {n: [] for n in order},
-            "best": np.max(bandit.probs) if hasattr(bandit, "probs") else config["environment"].get("best_mean", 0.9)
-        })
+        )
 
     return states
 
 
-def run_batched_llm_experiment(config, model):
-    """Run replicas with batched LLM inference."""
-    states = init_batched_runs(config, model)
-    horizon = config["experiment"]["horizon"]
-    track = config["experiment"].get("track_other_actions_for", [])
+def run_batched_llm_experiment(cfg, model):
+    """Run multiple replicas with batched LLM inference."""
+    states = init_batched_runs(
+        cfg,
+        model
+    )
+
+    horizon = cfg["experiment"]["horizon"]
+    track = cfg["experiment"].get(
+        "track_other_actions_for",
+        []
+    )
 
     for t in range(horizon):
-        prompts, refs = [], []
+        prompts = []
+        refs = []
 
-        # Collect all LLM prompts
-        for s in states:
-            for name in s["order"]:
-                cfg = s["cfg"][name]
-                agent = s["agents"][name]
+        # Collect all LLM requests from all runs
+        for state in states:
+            for name in state["order"]:
+                agent_cfg = state["cfg"][name]
 
-                if cfg.get("class") == "LLM":
-                    cfg["_other_action_counts"] = s["other_counts"].copy()
-                    prompts.append(build_llm_prompt(cfg, agent))
-                    refs.append((s, name, agent))
+                if agent_cfg.get("class") == "LLM":
+                    agent_cfg["_other_action_counts"] = (
+                        state["other_counts"].copy()
+                    )
 
-        # One batched generation
-        responses = batch_generate(model, prompts)
+                    prompts.append(
+                        build_llm_prompt(
+                            agent_cfg,
+                            state["agents"][name]
+                        )
+                    )
 
-        for (s, name, agent), response in zip(refs, responses):
-            s["actions"][name] = agent.getNextAction(response)
+                    refs.append(
+                        (
+                            state,
+                            name
+                        )
+                    )
 
-        # Non LLM agents
-        for s in states:
-            for name in s["order"]:
-                if s["cfg"][name].get("class") != "LLM":
-                    s["actions"][name] = s["agents"][name].getNextAction()
+        # One batched generation for all runs
+        responses = batch_generate(
+            model,
+            prompts
+        )
 
-        # Update statistics
-        for s in states:
-            for name, action in s["actions"].items():
-                agent = s["agents"][name]
+        actions_by_state = {}
 
-                if s["cfg"][name].get("class") == "LLM":
+        # Apply LLM responses
+        for (state, name), response in zip(
+            refs,
+            responses
+        ):
+            agent = state["agents"][name]
+            action = (agent.getNextActionFromResponse(response))
+            actions_by_state.setdefault(
+                id(state),
+                {}
+            )[name] = action
+
+        # Compute non LLM actions
+        for state in states:
+            actions = actions_by_state.setdefault(
+                id(state),
+                {}
+            )
+
+            for name in state["order"]:
+                agent_cfg = state["cfg"][name]
+                if agent_cfg.get("class") != "LLM":
+                    agent = state["agents"][name]
+                    if agent_cfg.get("observes"):
+                        obs = [
+                            state["history"][o][t]
+                            for o in agent_cfg["observes"]
+                            if len(state["history"][o]) > t
+                        ]
+
+                        action = agent.getNextAction(
+                            obs or None
+                        )
+                    else:
+                        action = agent.getNextAction()
+
+                    actions[name] = action
+
+        # Update all runs
+        for state in states:
+            actions = actions_by_state.get(id(state),{})
+            for name, action in actions.items():
+                agent = state["agents"][name]
+                # LLM response already updates reward internally only partially
+                # so update reward here for batched execution
+                if state["cfg"][name].get("class") == "LLM":
                     reward = agent.getReward(action)
                     agent.history[str(action)]["pulls"] += 1
                     agent.history[str(action)]["reward"] += reward
                     agent.t += 1
-
-                reward = agent.reward
-                s["history"][name].append(action)
-
-                s["reward"][name] += reward
-                s["rewards_ts"][name].append(
-                    s["reward"][name] / (t + 1)
-                )
-
-                if hasattr(s["bandit"], "regret"):
-                    s["regret"][name] += s["bandit"].regret(action)
+                    if t<3 :
+                        print(f"number of parsing errors : {agent.error}")
+                    if t>498:
+                        print(f"number of parsing errors : {agent.error}")
                 else:
-                    s["regret"][name] += s["best"] - s["bandit"].probs[action]
+                    reward = agent.reward
+                state["history"][name].append(action)
+                state["reward"][name] += reward
+                state["rewards_ts"][name].append(state["reward"][name] / (t + 1))
 
-                s["regrets_ts"][name].append(
-                    s["regret"][name]
+                state["regret"][name] += (state["bandit"].regret(action)
+                    if hasattr(state["bandit"], "regret")
+                    else state["best"] - state["bandit"].probs[action]
                 )
 
-            # Update tracked actions
+                state["regrets_ts"][name].append(
+                    state["regret"][name]
+                )
+
             for name in track:
-                action = s["actions"].get(name)
-                if action is not None:
-                    s["other_counts"][action] += 1
+                if name in actions:
+                    state["other_counts"][
+                        actions[name]
+                    ] += 1
 
-            s["actions"] = {}
+    return [
+        format_result(
+            state,
+            cfg
+        )
+        for state in states
+    ]
 
-    results = []
 
-    for s in states:
-        out = {
-            "time_averaged_rewards": {n: np.array(s["rewards_ts"][n])  for n in s["order"]},
-            "cumulated_regrets": {n: np.array(s["regrets_ts"][n]) for n in s["order"]}}
+def format_result(state, cfg):
+    """Convert state to experiment output format."""
+    out = {
+        "time_averaged_rewards": {},
+        "cumulated_regrets": {}
+    }
 
-        if config["experiment"].get("add_opt", False):
-            out["time_averaged_rewards"]["OPT"] = np.ones(horizon) * s["best"]
-            out["cumulated_regrets"]["OPT"] = np.zeros(horizon)
+    for name in state["order"]:
+        out["time_averaged_rewards"][name] = np.array(
+            state["rewards_ts"][name]
+        )
 
-        results.append(out)
+        out["cumulated_regrets"][name] = np.array(
+            state["regrets_ts"][name]
+        )
 
-    return results
+    if cfg["experiment"].get("add_opt", False):
+        horizon = cfg["experiment"]["horizon"]
 
+        out["time_averaged_rewards"]["OPT"] = (
+            np.ones(horizon) * state["best"]
+        )
+
+        out["cumulated_regrets"]["OPT"] = np.zeros(
+            horizon
+        )
+
+    return out
 
 def main():
     parser = argparse.ArgumentParser(
         description="Run multi-agent experiment."
     )
-    parser.add_argument("--config", required=True)
+
+    parser.add_argument(
+        "--config",
+        required=True,
+        help="Path to configuration file"
+    )
+
     args = parser.parse_args()
 
-    config = load_config(args.config)
-    exp = config["experiment"]
-    runs = exp.get("runs", 20)
+    cfg = load_config(
+        args.config
+    )
 
-    if uses_llm(config):
-        model = LLM(model=get_llm_model_name(config),max_model_len=4096)
-        results = run_batched_llm_experiment(config,model)
+    exp = cfg["experiment"]
+    runs = exp.get(
+        "runs",
+        20
+    )
+
+    results = []
+
+    if uses_llm(cfg):
+        print("Loading LLM once...")
+
+        model = LLM(
+            model=get_llm_model_name(cfg),
+            max_model_len=4096,
+            max_num_seqs=runs
+        )
+
+        results = run_batched_llm_experiment(
+            cfg,
+            model
+        )
 
     else:
-        tasks = [(i, config) for i in range(runs)]
-        with Pool(exp.get("n_jobs", 4)) as pool:
-            results = pool.map(run_single_rep,tasks)
+        print(
+            f"Running {runs} replicas..."
+        )
 
-    save_multi_results(results,config)
-    print(f"Saved {len(results)} runs")
+        tasks = [
+            (i, cfg)
+            for i in range(runs)
+        ]
+
+        with Pool(
+            processes=exp.get("n_jobs", 4)
+        ) as pool:
+            results = pool.map(
+                run_single_rep,
+                tasks
+            )
+
+    save_multi_results(
+        results,
+        cfg
+    )
+
+    print(
+        f"Saved {len(results)} runs"
+    )
 
 
 if __name__ == "__main__":

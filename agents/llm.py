@@ -34,7 +34,7 @@ class LLMAgent:
         self.cumul_regret = []
         self.t = 0
 
-
+    # seperate the asking task from the response treating one
     def getNextActionFromResponse(self, response):
         """
         Parse a batched LLM response and update agent statistics.
