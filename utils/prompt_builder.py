@@ -1,4 +1,4 @@
-def build_prompt_(bandit, nb_plays, arm_stats, other_actions=None, horizon= 500):
+def build_prompt(bandit, nb_plays, arm_stats, other_actions=None, horizon= 500):
 
     colors = ["blue","green","red","yellow","purple","orange","black","white"]
 
@@ -69,9 +69,8 @@ Let’s think step by step to make sure we make a good choice
 
     return prompt
 
-def prompt_response():
-    return f""" Now provide your final answer within the tags <Answer>COLOR</Answer>
-    """
+def request_response():
+    return " Now provide your final answer within the tags <Answer>COLOR</Answer>"
 
 def build_prompt_krishnamurthy(
     bandit,

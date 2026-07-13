@@ -1,11 +1,12 @@
 experiment:
   seed: 40
   n_jobs: 4
-  output_dir: results/multi/krishnamurthy_2024C/figure1
-  horizon: 500
-  runs: 20
+  output_dir: results/multi/test
+  horizon: 20
+  runs: 3
   order: [ucb1,Greedy, ts ,llm_history]
-  track_other_actions_for: [ucb, Greedy, ts]
+  track_other_actions_for: ["ucb1", "Greedy", "ts"]
+  add_opt: True
 
 environment:
   n_arms: 5
@@ -22,6 +23,6 @@ agents:
     class: Greedy
   - name: llm_history
     class: LLM
-    prompt: history
+    prompt: default
     params:
       model: Qwen/Qwen2.5-7B-Instruct
