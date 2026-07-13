@@ -51,4 +51,3 @@ class UCB:
             self.cumul_regret.append(self.cumul_regret[-1] + step_regret)
 
         return arm
-

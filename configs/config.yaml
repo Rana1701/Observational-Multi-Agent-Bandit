@@ -1,9 +1,0 @@
-experiment: solo
-agents: [ucb, greedy, e_greedy, llm]
-runs: 20
-plays: 500
-seed: 42
-
-rate0: 0.6
-rate1: 0.4
-epsilon: 0.1

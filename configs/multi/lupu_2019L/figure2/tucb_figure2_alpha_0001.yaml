@@ -1,0 +1,27 @@
+experiment:
+  runs: 2000
+  horizon: 15000
+  seed: 42
+  n_jobs: 4
+  interaction: sequential
+  order: [alphaOptimal, greedy, tucb]
+  output_dir: results/multi/krishnamurthy_2024C/figure2/alpha_0001
+
+environment:
+  n_arms: 2
+  delta: 0.1
+  best_mean: 0.9
+
+agents:
+  - name: alphaOptimal
+    class: alphaOptimal
+    params:
+      alpha : 0.001
+  - name: greedy
+    class: GreedyFollower
+    observes: [alphaOptimal]
+  - name: tucb
+    class: TUCB
+    observes: [alphaOptimal]
+    params:
+      nbr_neighbours: 1
