@@ -29,6 +29,7 @@ from utils.prompt_builder import (
     build_prompt_ucb_noHistory,
     build_prompt_explore,
     build_prompt_krishnamurthy,
+    build_prompt,
 )
 
 AGENTS = {
@@ -45,7 +46,7 @@ AGENTS = {
 }
 
 PROMPT_BUILDERS = {
-    "default": None,
+    "default": build_prompt,
     "history": build_prompt_history ,
     "no_history": build_prompt_noHistory ,
     "ucb": build_prompt_ucb_noHistory,
@@ -91,6 +92,7 @@ def uses_llm(cfg):
 def build_llm_prompt(agent_cfg, agent):
     prompt_name = agent_cfg.get("prompt", "default")
     builder = PROMPT_BUILDERS.get(prompt_name)
+    #print(f" prompt name {prompt_name}, prompt builder {builder}")
     if builder is None:
         return None
 

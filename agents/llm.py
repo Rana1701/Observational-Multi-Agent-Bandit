@@ -9,6 +9,7 @@ import re
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from environnement.bernoulli_bandit import BernoulliBandit
+from utils.prompt_builder import request_response
  
 
 class LLMAgent:
@@ -27,76 +28,96 @@ class LLMAgent:
                 "Maximize cumulative reward. Base decisions on other agents' observed actions and your experience.\n"
                 "Respond ONLY with valid JSON, nothing else:\n"
                 f'{{\"action\": <int 0 to {self.bandit.n_arms-1}>, \"explication\": \"<reason>\"}}\n'
-                "CRITICAL: Return only ONE JSON object. No markdown, no extra text before/after."
+                "CRITICAL: Return only <Answer>Color</Answer> . No markdown, no extra text before/after."
             )
 
         self.cumul_regret = []
         self.t = 0
 
+
+    def getNextActionFromResponse(self, response):
+        """
+        Parse a batched LLM response and update agent statistics.
+        """
+
+        self.explanation = response
+
+        try:
+            action = self.extract_reponse(response)
+
+        except Exception:
+            self.error += 1
+            action = 0
+
+        reward = self.getReward(action)
+
+        self.history[str(action)]["pulls"] += 1
+        self.history[str(action)]["reward"] += reward
+
+        self.t += 1
+
+        regret = self.bandit.regret(action)
+
+        if len(self.cumul_regret) > 0:
+            self.cumul_regret.append(
+                self.cumul_regret[-1] + regret
+            )
+        else:
+            self.cumul_regret.append(regret)
+
+        return action
+
     #extract response and updates stats 
     def extract_reponse(self, response_text):
-        self.t += 1
         response = None
         action = None
-        colors = ["blue","green","red","yellow","purple","orange","black","white"]
+        colors = ["blue", "green", "red", "yellow", "purple", "orange", "black", "white"]
 
         self.explanation = response_text
 
         # 1. JSON format case
         try:
-            if not response_text.endswith("}"):
-                response_text += "}"
             response = self.extract_json(response_text)
-            action = response.get("action", 0)
+            action = response.get("action", None)
         except Exception:
             pass
 
-        # 2. <Answer><Answer> Format case
+        # 2. <Answer>COLOR</Answer> format case
         if action is None:
+            answer_content = None
             try:
-                # Recherche du texte contenu entre <Answer> et </Answer>
-                match = re.search(r"<Answer>(.*?)</Answer>", response_text, re.DOTALL)
-                
+                # Accept:
+                # <Answer>blue</Answer>
+                # <Answer>BLUE</Answer>
+                # <Answer>Blue</Answer>
+                # <Answer> bLuE </Answer>
+                match = re.search(r"<Answer>(.*?)</Answer>", response_text, re.DOTALL | re.IGNORECASE)
+
                 if match:
-                    answer_content = match.group(1).strip()
-                    
+                    answer_content = match.group(1).strip().lower()
                     choices = colors[:self.bandit.n_arms]
 
-                    # Convert color to its index
+                    # Convert color to index
                     if answer_content in choices:
                         action = choices.index(answer_content)
-                    
-                    # Si la réponse est directement l'entier sous forme de texte (ex: "3")
+
+                    # If answer is a digit (ex: "3")
                     elif answer_content.isdigit():
                         action = int(answer_content)
-                    
-                    # Si le texte de la balise ne correspond à rien de connu
                     else:
-                        raise ValueError("Content inside tags does not match any valid action")
+                        raise ValueError(f"Unknown color: {answer_content}")
+
                 else:
                     raise ValueError("No <Answer> tags found")
 
-            except Exception:
+            except Exception as e:
                 self.error += 1
-                action = 2
-                print(f"Unrecognized answer content: {answer_content}. Defaulting to action 0. Parsing errors = {self.error}")
-
-        # 3. Traitement des récompenses et historique (inchangé)
-        step_reward = self.getReward(action)
-
-        self.history[str(action)]["pulls"] += 1
-        self.history[str(action)]["reward"] += step_reward
-
-        step_regret = self.bandit.regret(action)
-
-        if self.t > 1:
-            self.cumul_regret.append(self.cumul_regret[-1] + step_regret)
-        else:
-            self.cumul_regret.append(step_regret)
+                action = 0
+                print(f"Unrecognized answer content: {answer_content}. "
+                    f"Defaulting to action 0. Parsing errors = {self.error}. Error: {e}")
 
         return action
-
-
+        
     def ask(self, prompt):
         if self.model is None:
             print("Model loading failed. Using fallback action.")
@@ -105,9 +126,9 @@ class LLMAgent:
         try:
             sampling_params = SamplingParams(
                 temperature=0,
-                max_tokens=512,
+                max_tokens=1024,
                 top_p=0.9,
-                stop=["}"]
+                stop=["</Answer>"]
             )
 
             result = self.model.generate(
@@ -116,42 +137,48 @@ class LLMAgent:
             )
 
             response = result[0].outputs[0].text.strip()
-            
-            # Only add closing brace if not already present
-            if not response.rstrip().endswith("}"):
-                response += "}"
-            
-            if self.t < 10: # Print the first few responses for debugging
-                print("RAW RESPONSE:")
-                print(response)
-
+            response += "</Answer>"
         except Exception as e:
             print("GENERATION ERROR:", repr(e))
             self.error += 1
-            return {"action": 0, "explanation": "model generation failed"}
+            return "action: 0, explanation: model generation failed"
 
         try:
-            return self.extract_reponse(response)
+            return response
         except:
             self.error += 1
-            return {
-                "action": 0,
-                "explanation": "parse failed"
-            }
+            return "action: 0, explanation: parsing failed"
 
     def getNextAction(self, prompt=None):
-        if prompt is None:
-            prompt = self.default_prompt
-        
         self.t += 1
 
         try:
-            response = self.ask(prompt)
+            #print("="*80)
+            #print(prompt)
+            #print("="*80)
+            self.explanation = self.ask(prompt)
         except Exception:
-            response = {"action": 0, "explanation": "default fallback action"}
+            print ("action: 0, explanation: ask method failed" )
+            return 0
 
-        action = response.get('action', 0)
-        self.explanation = response.get('explanation', '')
+        try:
+            print("="*80)
+            print(f"Explanation (reponse 1 ): {self.explanation}")
+            print("="*80)
+
+            """
+            response = self.ask(request_response())
+            
+            print("="*80)
+            print(f"Reponse 2 {response} ")
+            print("="*80)
+            """
+            action = self.extract_reponse(self.explanation)
+        except Exception:
+            print ("action: 0, explanation: response extraction failed" )
+            return 0            
+
+        # Updating stats
         step_reward = self.getReward(action)
 
         self.history[str(action)]["pulls"] += 1
@@ -164,9 +191,7 @@ class LLMAgent:
         else:
             self.cumul_regret.append(step_regret)
 
-        #print(f"Action {action} , Explanation: {self.explanation}")
-        if self.t >498: 
-            print(f"parse errors: {self.error} ")
+        print(f"parse errors: {self.error} ")
         return action
 
     def charging_model(self, name_parameter="Qwen/Qwen2.5-7B-Instruct"):

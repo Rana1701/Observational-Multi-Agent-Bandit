@@ -21,7 +21,7 @@ from utils.experiment_utils import (
     get_llm_model_name,
     save_multi_results,
 )
-
+"""
 def run_single_rep(task, shared_model=None):
     run_idx, cfg = task
     probs = cfg["environment"].get("probs", None)
@@ -51,6 +51,7 @@ def run_single_rep(task, shared_model=None):
     bandit = build_bandit(cfg["environment"], seed)
     n_arms = bandit.n_arms
     other_action_counts = [0] * n_arms
+    print("RESET COUNTS:", other_action_counts)
 
     for a in agent_cfgs:
         name = a["name"]
@@ -73,7 +74,9 @@ def run_single_rep(task, shared_model=None):
         for t in range(horizon):
             if a.get("class") == "LLM":
                 cfg_by_name[name]["_other_action_counts"] = other_action_counts
+                print("BEFORE PROMPT", name, other_action_counts)
                 prompt = build_llm_prompt(cfg_by_name[name], agent)
+
                 action = agent.getNextAction(prompt)
                 
             elif a.get("observes"):
@@ -117,6 +120,130 @@ def run_single_rep(task, shared_model=None):
 
     out["time_averaged_rewards"]["OPT"] = np.array(opt_curve)
     out["cumulated_regrets"]["OPT"] = np.zeros(horizon) 
+
+    return out
+
+"""
+
+
+def run_single_rep(task, shared_model=None):
+    run_idx, cfg = task
+    probs = cfg["environment"].get("probs", None)
+    exp = cfg["experiment"]
+
+    seed = run_seed(exp.get("seed"), run_idx)
+    random.seed(seed)
+    np.random.seed(seed)
+
+    agent_cfgs = cfg["agents"]
+    order = exp.get("order") or [a["name"] for a in agent_cfgs]
+    horizon = exp["horizon"]
+
+    out = {
+        "time_averaged_rewards": {},
+        "cumulated_regrets": {}
+    }
+
+    agents = {}
+    cfg_by_name = {}
+
+    if probs is not None:
+        max_theoretical_reward = np.max(probs)
+    else:
+        max_theoretical_reward = cfg["environment"].get("best_mean", 0.9)
+
+    global_history = {name: [] for name in order}
+
+    bandit = build_bandit(cfg["environment"], seed)
+    n_arms = bandit.n_arms
+
+    # History of actions from previous timesteps
+    other_action_counts = [0] * n_arms
+    print("RESET COUNTS:", other_action_counts)
+
+    # Create agents
+    for a in agent_cfgs:
+        name = a["name"]
+        cfg_by_name[name] = a
+
+        agents[name] = create_agent(
+            AGENTS[a["class"]],
+            bandit,
+            a.get("params"),
+            shared_model=shared_model,
+        )
+
+    cumulative_reward = {name: 0.0 for name in order}
+    cumulative_regret = {name: 0.0 for name in order}
+
+    rewards_ts = {name: [] for name in order}
+    regrets_ts = {name: [] for name in order}
+
+    # Main time loop
+    for t in range(horizon):
+        current_actions = {}
+
+        # Agents choose actions based on previous history only
+        for a in agent_cfgs:
+            name = a["name"]
+            agent = agents[name]
+
+            if a.get("class") == "LLM":
+                cfg_by_name[name]["_other_action_counts"] = other_action_counts.copy()
+                print("BEFORE PROMPT", name, other_action_counts)
+                prompt = build_llm_prompt(cfg_by_name[name],agent)
+                action = agent.getNextAction(prompt)
+
+            elif a.get("observes"):
+                observed = [
+                    global_history[o][t]
+                    for o in a.get("observes", [])
+                    if o in global_history and len(global_history[o]) > t
+                ]
+                action = agent.getNextAction(observed or None)
+            else:
+                action = agent.getNextAction()
+
+            current_actions[name] = action
+            global_history[name].append(action)
+            reward = agent.reward
+            cumulative_reward[name] += reward
+            rewards_ts[name].append(
+                cumulative_reward[name] / (t + 1)
+            )
+
+            if hasattr(bandit, "regret"):
+                cumulative_regret[name] += bandit.regret(action)
+            else:
+                expected_reward = bandit.probs[action]
+                cumulative_regret[name] += (
+                    max_theoretical_reward - expected_reward
+                )
+
+            regrets_ts[name].append(
+                cumulative_regret[name]
+            )
+
+        # Update observed actions after all agents have played
+        for name, action in current_actions.items():
+            if name in cfg["experiment"]["track_other_actions_for"]:
+                if 0 <= action < len(other_action_counts):
+                    other_action_counts[action] += 1
+
+    # Save results
+    for name in order:
+        out["time_averaged_rewards"][name] = np.array(rewards_ts[name])
+        out["cumulated_regrets"][name] = np.array(regrets_ts[name])
+
+    # ===== BASELINE OPT =====
+    if cfg["experiment"].get("add_opt", False):
+        opt_cum = 0.0
+        opt_curve = []
+        for t in range(horizon):
+            opt_cum += max_theoretical_reward
+            opt_curve.append(opt_cum / (t + 1))
+        out["time_averaged_rewards"]["OPT"] = np.array(opt_curve)
+        out["cumulated_regrets"]["OPT"] = np.zeros(horizon)
 
     return out
 
