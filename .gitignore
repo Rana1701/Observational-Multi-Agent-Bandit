@@ -3,6 +3,6 @@
 __pycache__/
 *.pyc
 figs/
-results/
 *.png
+results/
 Target-UCB/
