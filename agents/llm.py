@@ -125,7 +125,7 @@ class LLMAgent:
         try:
             sampling_params = SamplingParams(
                 temperature=0,
-                max_tokens=800,
+                max_tokens=1024,
                 top_p=0.9,
                 stop=["</Answer>"]
             )

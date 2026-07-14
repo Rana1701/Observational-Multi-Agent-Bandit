@@ -1,10 +1,10 @@
 experiment:
   seed: 40
   n_jobs: 4
-  output_dir: results/multi/current/fixed_prompt_500
+  output_dir: results/multi/current/qwen
   horizon: 500
   runs: 20
-  order: [ucb1,Greedy, ts ,llm_history]
+  order: [ucb1,Greedy, ts ,Qwen]
   track_other_actions_for: ["ucb1", "Greedy", "ts"]
   add_opt: False
 
