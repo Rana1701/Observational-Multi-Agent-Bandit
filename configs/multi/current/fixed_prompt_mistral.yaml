@@ -21,8 +21,8 @@ agents:
     class: TS
   - name: Greedy
     class: Greedy
-  - name: llm_history
+  - name: Mistral
     class: LLM
     prompt: default
     params:
-      model: Qwen/Qwen2.5-7B-Instruct
+      model: mistralai/Mistral-7B-Instruct-v0.2
