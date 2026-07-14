@@ -379,7 +379,7 @@ def main():
         model = LLM(
             model=get_llm_model_name(cfg),
             max_model_len=4096,
-            max_num_seqs=40
+            max_num_seqs=runs
         )
 
         results = run_batched_llm_experiment(
