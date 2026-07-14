@@ -1,0 +1,28 @@
+experiment:
+  seed: 40
+  n_jobs: 4
+  output_dir: results/multi/current/fixed_prompt_500
+  horizon: 500
+  runs: 20
+  order: [ucb1,Greedy, ts ,llm_history]
+  track_other_actions_for: ["ucb1", "Greedy", "ts"]
+  add_opt: False
+
+environment:
+  n_arms: 5
+  delta: 0.2
+  best_mean: 0.6
+  probs: [0.4, 0.4, 0.6, 0.4, 0.4]
+
+agents:
+  - name: ucb1
+    class: UCB1
+  - name: ts
+    class: TS
+  - name: Greedy
+    class: Greedy
+  - name: Mistral
+    class: LLM
+    prompt: default
+    params:
+      model: meta-llama/Llama-3.1-8B-Instruct
