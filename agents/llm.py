@@ -26,8 +26,7 @@ class LLMAgent:
         self.default_prompt = (
                 f"You are a multi-armed bandit agent with {self.bandit.n_arms} arms.\n"
                 "Maximize cumulative reward. Base decisions on other agents' observed actions and your experience.\n"
-                "Respond ONLY with valid JSON, nothing else:\n"
-                f'{{\"action\": <int 0 to {self.bandit.n_arms-1}>, \"explication\": \"<reason>\"}}\n'
+                f'{{\"action\": <int 0 to {self.bandit.n_arms-1}>"}}\n'
                 "CRITICAL: Return only <Answer>Color</Answer> . No markdown, no extra text before/after."
             )
 
@@ -126,7 +125,7 @@ class LLMAgent:
         try:
             sampling_params = SamplingParams(
                 temperature=0,
-                max_tokens=1024,
+                max_tokens=800,
                 top_p=0.9,
                 stop=["</Answer>"]
             )
