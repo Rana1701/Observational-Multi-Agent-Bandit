@@ -287,7 +287,7 @@ def run_batched_llm_experiment(cfg, model):
                     agent.t += 1
                     if t<3 :
                         print(f"number of parsing errors : {agent.error}")
-                    if t>498:
+                    if t == horizon - 1 :
                         print(f"number of parsing errors : {agent.error}")
                 else:
                     reward = agent.reward

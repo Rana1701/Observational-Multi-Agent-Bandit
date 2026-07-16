@@ -9,7 +9,7 @@ import re
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from environnement.bernoulli_bandit import BernoulliBandit
-from utils.prompt_builder import request_response
+from utils.prompt_builder import request_response , request_cot
  
 
 class LLMAgent:
@@ -35,14 +35,14 @@ class LLMAgent:
 
     # seperate the asking task from the response treating one
     def getNextActionFromResponse(self, response):
-        """
-        Parse a batched LLM response and update agent statistics.
-        """
 
         self.explanation = response
+        answer =self.ask(request_response(self.bandit.n_arms, response))
 
+        #print(f"========================= Cot is : ========================= \n {response}")
+        #print(f"========================= Answer is ========================= \n {answer}")
         try:
-            action = self.extract_reponse(response)
+            action = self.extract_reponse(answer)
 
         except Exception:
             self.error += 1
@@ -137,6 +137,9 @@ class LLMAgent:
 
             response = result[0].outputs[0].text.strip()
             response += "</Answer>"
+            #print("="*80)
+            #print(response)
+            #print("="*80)
         except Exception as e:
             print("GENERATION ERROR:", repr(e))
             self.error += 1
@@ -206,8 +209,6 @@ class LLMAgent:
         self.reward= self.bandit.pull(arm_played)
         return self.reward
     
-    
-
 
         
 def main():
@@ -216,13 +217,33 @@ def main():
     llm = LLM(model="Qwen/Qwen2.5-7B-Instruct")
     
     '''Runs a LLM agent for 100 plays'''
-    agent = LLMAgent(BernoulliBandit(n_arms=2, best_mean=0.5, delta=0.2), model=llm)  
+    agent = LLMAgent(BernoulliBandit(n_arms=5, best_mean=0.6, delta=0.2), model=llm)  
     
     import time
 
     t0 = time.perf_counter()
 
-    for _ in range(100):
+    for _ in range(2):
+        prompt = request_cot(agent.bandit, agent.t, agent.history, None, horizon=5)
+        print("="*80)
+        print(f"The COT prompt is : {prompt}")
+        print("="*80)
+        agent.explanation = agent.ask(prompt)
+        print("="*80)
+        print(f"COT response is : {agent.explanation}")
+        print("="*80)
+        decision = agent.ask(request_response(agent.bandit.n_arms))
+        print("="*80)
+        print("The second prompt is : ",request_response(5))
+        print("="*80)
+        print("="*80)
+        print("The brut decision is : ",decision)
+        print("="*80)
+        action = agent.extract_reponse(decision)
+        print("="*80)
+        print("Action is : ")
+        print(action)
+        print("="*80)
         agent.getNextAction()
 
     t1 = time.perf_counter()
