@@ -69,8 +69,98 @@ Let’s think step by step to make sure we make a good choice
 
     return prompt
 
-def request_response():
-    return " Now provide your final answer within the tags <Answer>COLOR</Answer>"
+def request_cot(bandit, nb_plays, arm_stats, other_actions=None, horizon= 500):
+
+    colors = ["blue","green","red","yellow","purple","orange","black","white"]
+
+    arms = colors[:bandit.n_arms]
+
+    prompt = f"""[SYSTEM] 
+You are a multi-agent bandit algorithm.
+
+You are in a room with {bandit.n_arms} buttons labeled:
+{", ".join(arms)}.
+
+Each button is associated with a Bernoulli distribution with a fixed but unknown mean; the means for the buttons could be different
+For each button, when you press it, you will get a reward that is sampled from the button’s associated distribution.
+You have {horizon} time steps and, on each time step, you can choose any button and receive the reward. 
+Your goal is to maximize the total reward over the {horizon} time steps
+
+At each time step,you can observe:
+1. A summary of your own past choices and rewards.
+2. The choices made by other agents sharing the same environment.
+Other agents' rewards are hidden.
+Use this information carefully : You should balance exploration of uncertain buttons and exploitation of buttons that appear promising.
+
+Then you must make the next choice, which must be exactly one of {", ".join(arms)}.
+Let’s think step by step to make sure we make a good choice.
+You must provide your final answer within the tags <Answer>COLOR</Answer> where COLOR is one of {", ".join(arms)}
+
+"""
+
+    prompt += f""" [USER] 
+Your own history so far:
+
+You have played {nb_plays} times.
+
+Summary of your past choices and rewards:
+"""
+    for i in range(bandit.n_arms):
+        pulls = arm_stats[str(i)]["pulls"]
+        avg_reward = (
+            arm_stats[str(i)]["reward"] / pulls
+            if pulls > 0
+            else 0
+        )
+
+        prompt += f"""
+- {arms[i]} button:
+    pressed {pulls} times
+    average reward: {avg_reward:.2f}
+"""
+
+    if other_actions is not None:
+
+        prompt += """
+
+Observed actions from other agents:
+"""
+        for i in range(bandit.n_arms):
+
+            prompt += f"""
+- {arms[i]} button:
+    selected {other_actions[i]} times by other agents
+"""
+    prompt += f"""
+Which button will you choose next?
+
+Remember : YOU MUST provide your final answer within the tags <Answer>COLOR</Answer> where COLOR is one of {", ".join(arms)}
+Let’s think step by step to make sure we make a good choice
+"""
+
+    return prompt
+
+def request_response(n_arms, previous_answer):
+
+    colors = ["blue","green","red","yellow","purple","orange","black","white"]
+    arms = colors[:n_arms]
+    allowed_colors = ", ".join(arms)
+    
+    return f"""Here's your previous reasoning :
+===============================================================
+{previous_answer}
+===============================================================
+
+Based on your previous reasoning, extract the final color you chose as the next action.
+
+You must respond ONLY with the color name enclosed in the tags, like this: <Answer>COLOR</Answer>
+Do not write any introductory text, explanation, or other formatting. 
+Answer with ONLY ONE COLOR !
+COLOR must be exactly one of: {allowed_colors}
+Do not return the word "color" 
+
+
+"""
 
 def build_prompt_krishnamurthy(
     bandit,
@@ -302,80 +392,6 @@ Statistics : here is your personal history of actions and rewards:
     Do NOT generate multiple responses, do NOT use markdown code blocks.
     Your single response:"""
     return prompt
-
-# Prompt without history
-def build_prompt_noHistory(bandit, nb_plays, arm_stats= None, other_actions = None, horizon= 500):
-
-    return f"""
-You are a multi-armed bandit algorithm solving a {bandit.n_arms}-armed Bernoulli bandit problem.
-
-There are {bandit.n_arms} arms:
-- Arm 0 ... Arm {bandit.n_arms - 1}
-
-Each arm has an unknown but fixed probability of returning reward 1.
-Whenever an arm is pulled, the reward is either 0 or 1.
-Your objective is to maximize cumulative reward over time.
-
-You MUST return a valid JSON object and nothing else. Expected format:
-
-{{
-    "action": x,
-    "explication": "your reasoning step by step"
-}}
-
-The action must be between 0 and {bandit.n_arms - 1}
-So far you have played {nb_plays} times.
-
-Remember:
-- Return ONLY ONE JSON object with keys:
-- action (0 ... {bandit.n_arms - 1})
-- explication (string)
-Do not add any text before or after.
-Do not use markdown.
-"""
-
-# Prompt to imitate UCB
-def build_prompt_ucb_noHistory(bandit, nb_plays, arm_stats= None, other_actions = None, horizon= 500):
-
-    return f"""
-[SYSTEM]
-
-You are a UCB multi-armed bandit algorithm solving a {bandit.n_arms}-armed Bernoulli bandit problem.
-
-There are {bandit.n_arms} arms:
-- Arm 0 ... Arm {bandit.n_arms - 1}
-
-Each arm has an unknown but fixed probability of returning reward 1.
-Whenever an arm is pulled, the reward is either 0 or 1.
-
-Your objective is to maximize cumulative reward over time.
-
-You should act exactly like a UCB algorithm.
-
-You MUST return you answer as a valid JSON object and nothing else.
-
-Expected format:
-
-{{
-    "action": x,
-    "explication": "your reasoning"
-}}
-
-The action must be between 0 and {bandit.n_arms - 1}.
-
-[USER]
-
-So far you have played {nb_plays} times.
-
-Think as a UCB algorithm before answering.
-
-Remember:
-Return ONLY ONE JSON object with keys:
-- action (0 ... {bandit.n_arms - 1})
-- explication (string)
-Do not add any text before or after.
-Do not use markdown.
-"""
 
 def build_prompt_exploit(bandit, nb_plays = None, arm_stats = None, other_actions = None, horizon= 500):
     return f"""
