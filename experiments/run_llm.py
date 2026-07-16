@@ -7,7 +7,7 @@ from multiprocessing import Pool
 from vllm import LLM, SamplingParams
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
+from utils.prompt_builder import request_response
 from utils.experiment_utils import (
     load_config,
     run_seed,
@@ -236,17 +236,37 @@ def run_batched_llm_experiment(cfg, model):
         actions_by_state = {}
 
         # Apply LLM responses
-        for (state, name), response in zip(
-            refs,
-            responses
-        ):
+        # Première génération : CoT
+        for (state, name), response in zip(refs, responses):
+            state["agents"][name].explanation = response
+
+
+        # Deuxième génération : extraction
+        extract_prompts = []
+
+        for (state, name), response in zip(refs, responses):
+            extract_prompts.append(
+                request_response(
+                    state["bandit"].n_arms,
+                    response
+                )
+            )
+
+        extract_responses = batch_generate(
+            model,
+            extract_prompts
+        )
+
+
+        # Parsing des réponses finales
+        for (state, name), answer in zip(refs, extract_responses):
             agent = state["agents"][name]
-            action = (agent.getNextActionFromResponse(response))
+            action = agent.extract_reponse(answer)
+
             actions_by_state.setdefault(
                 id(state),
                 {}
             )[name] = action
-
         # Compute non LLM actions
         for state in states:
             actions = actions_by_state.setdefault(
