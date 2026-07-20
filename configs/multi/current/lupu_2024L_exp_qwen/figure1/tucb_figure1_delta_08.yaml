@@ -4,8 +4,9 @@ experiment:
   seed: 42
   n_jobs: 4
   interaction: sequential
-  order: [ucb, greedy, tucb]
-  output_dir: results/multi/test/delta_08
+  order: [ucb, greedy, Qwen]
+  track_other_actions_for: ["ucb"]
+  output_dir: results/multi/current/lupu_2019L_exp_qwen/figure1/delta_08
 
 environment:
   n_arms: 2
@@ -18,8 +19,8 @@ agents:
   - name: greedy
     class: GreedyFollower
     observes: [ucb]
-  - name: tucb
-    class: TUCB
-    observes: [ucb]
+  - name: Qwen
+    class: LLM
+    prompt: default
     params:
-      nbr_neighbours: 1
+      model: Qwen/Qwen2.5-7B-Instruct

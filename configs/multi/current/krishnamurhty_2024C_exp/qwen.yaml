@@ -1,7 +1,7 @@
 experiment:
   seed: 40
   n_jobs: 4
-  output_dir: results/multi/current/qwen2
+  output_dir: results/multi/current/qwen
   horizon: 500
   runs: 20
   order: [ucb,Greedy, ts ,Qwen]
