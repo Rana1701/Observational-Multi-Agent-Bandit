@@ -1,11 +1,11 @@
 experiment:
   seed: 40
   n_jobs: 4
-  output_dir: results/multi/current/fixed_prompt_500
+  output_dir: results/multi/current/mistral
   horizon: 500
   runs: 20
-  order: [ucb1,Greedy, ts ,llm_history]
-  track_other_actions_for: ["ucb1", "Greedy", "ts"]
+  order: [ucb, Greedy, ts ,Mistral]
+  track_other_actions_for: ["ucb", "Greedy", "ts"]
   add_opt: False
 
 environment:
@@ -15,8 +15,8 @@ environment:
   probs: [0.4, 0.4, 0.6, 0.4, 0.4]
 
 agents:
-  - name: ucb1
-    class: UCB1
+  - name: ucb
+    class: UCB
   - name: ts
     class: TS
   - name: Greedy
