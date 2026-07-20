@@ -1,0 +1,21 @@
+experiment:
+  runs: 2000
+  horizon: 1000
+  seed: 42
+  n_agents: 11
+  interaction: simultaneous
+  output_dir: results/multi/krishnamurthy_2024C/figure3
+
+environment:
+  n_arms: 2
+  delta: 0.1
+  best_mean: 0.5
+  probs: [0.5, 0.4]
+
+agents:
+  - name: Qwen
+    class: LLM
+    prompt: default
+    params:
+      model: Qwen/Qwen2.5-7B-Instruct
+
