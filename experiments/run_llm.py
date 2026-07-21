@@ -399,7 +399,8 @@ def main():
         model = LLM(
             model=get_llm_model_name(cfg),
             max_model_len=4096,
-            max_num_seqs=runs
+            max_num_seqs=150,
+            gpu_memory_utilization=0.95
         )
 
         results = run_batched_llm_experiment(

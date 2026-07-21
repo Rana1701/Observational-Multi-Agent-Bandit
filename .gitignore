@@ -6,3 +6,4 @@ figs/
 *.png
 results/
 Target-UCB/
+logs/
