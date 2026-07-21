@@ -4,7 +4,7 @@ experiment:
   seed: 42
   n_agents: 11
   interaction: simultaneous
-  output_dir: results/multi/krishnamurthy_2024C/figure3
+  output_dir: results/multi/test
 
 environment:
   n_arms: 2
@@ -13,9 +13,5 @@ environment:
   probs: [0.5, 0.4]
 
 agents:
-  - name: Qwen
-    class: LLM
-    prompt: default
-    params:
-      model: Qwen/Qwen2.5-7B-Instruct
-
+  - name: tucb
+    class: TUCB
