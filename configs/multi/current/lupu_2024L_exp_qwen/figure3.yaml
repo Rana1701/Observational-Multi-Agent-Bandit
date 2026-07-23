@@ -1,10 +1,10 @@
 experiment:
-  runs: 2000
-  horizon: 1000
+  runs: 20
+  horizon: 10
   seed: 42
   n_agents: 11
-  order: [UCB clique, single UCB, TUCB clique]
-  output_dir: results/multi/lupu_2024L_exp_qwen/figure3
+  order: [UCB clique, single UCB, LLM clique]
+  output_dir: results/multi/current/lupu_2024L_exp_qwen/figure3
 
 environment:
   n_arms: 2
@@ -14,12 +14,13 @@ environment:
 agents:
   - name: single UCB
     class: UCB
+
   - name: UCB clique
     class: UCBClique
     params:
       clique_size: 11
-  - name: TUCB clique
-    class: TUCBClique
+
+  - name: LLM clique
+    class: LLMClique
     params:
       clique_size: 11
-      delta: 0.1

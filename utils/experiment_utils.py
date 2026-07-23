@@ -17,6 +17,7 @@ from environnement.bernoulli_bandit import BernoulliBandit
 from agents.ucb import UCB
 from agents.tucb import TUCB
 from agents.tucbClique import TUCBClique
+from agents.llmClique import LLMClique
 from agents.greedy import Greedy
 from agents.greedy_follower import GreedyFollower
 from agents.e_greedy import EpsilonGreedy
@@ -43,6 +44,7 @@ AGENTS = {
     "GreedyFollower": GreedyFollower,
     "EpsilonGreedy": EpsilonGreedy,
     "LLM": LLMAgent,
+    "LLMClique" : LLMClique,
     "TS" : TS,
     "alphaOptimal": alphaOptimal,
 }
@@ -75,7 +77,7 @@ def build_bandit(environment_cfg, seed):
 def create_agent(agent_class, bandit, params=None, shared_model=None):
     params = dict(params or {})
 
-    if agent_class is LLMAgent:
+    if agent_class in (LLMAgent, LLMClique):
         if shared_model is not None:
             params["model"] = shared_model
         elif "model" in params and isinstance(params["model"], str):
@@ -85,9 +87,9 @@ def create_agent(agent_class, bandit, params=None, shared_model=None):
 
 
 def uses_llm(cfg):
-    if cfg.get("agent") == "LLM":
+    if cfg.get("agent") in ("LLM", "LLMClique"):
         return True
-    return any(a.get("class") == "LLM" for a in cfg.get("agents", []))
+    return any(a.get("class") in ("LLM", "LLMClique") for a in cfg.get("agents", []))
 
 def build_llm_prompt(agent_cfg, agent):
     prompt_name = agent_cfg.get("prompt", "default")
