@@ -10,6 +10,7 @@ class UCBClique:
         self.t = 0
         self.cumul_regret = 0.0
         self.history_regret = []
+        self.reward = 0
 
     def getNextAction(self):
         self.t += 1
@@ -27,9 +28,11 @@ class UCBClique:
         # La clique entière tire le même bras sélectionné (Partage total d'information)
         for _ in range(self.clique_size):
             reward = self.bandit.pull(action)
+            self.reward = reward
             self.nb_plays[action] += 1
             self.avg_reward[action] += (reward - self.avg_reward[action]) / self.nb_plays[action]
             
         # Accumuler le regret moyen par nœud de la clique
         self.cumul_regret += self.bandit.regret(action)
         self.history_regret.append(self.cumul_regret)
+        return action

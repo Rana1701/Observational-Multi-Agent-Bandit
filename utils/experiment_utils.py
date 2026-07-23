@@ -16,6 +16,7 @@ from agents.ts import TS
 from environnement.bernoulli_bandit import BernoulliBandit
 from agents.ucb import UCB
 from agents.tucb import TUCB
+from agents.tucbClique import TUCBClique
 from agents.greedy import Greedy
 from agents.greedy_follower import GreedyFollower
 from agents.e_greedy import EpsilonGreedy
@@ -37,6 +38,7 @@ AGENTS = {
     "UCB1": UCB1,
     "UCBClique": UCBClique,
     "TUCB": TUCB,
+    "TUCBClique": TUCBClique,
     "Greedy": Greedy,
     "GreedyFollower": GreedyFollower,
     "EpsilonGreedy": EpsilonGreedy,
