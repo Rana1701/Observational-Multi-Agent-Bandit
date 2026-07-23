@@ -3,15 +3,23 @@ experiment:
   horizon: 1000
   seed: 42
   n_agents: 11
-  interaction: simultaneous
-  output_dir: results/multi/krishnamurthy_2024C/figure3
+  order: [UCB clique, single UCB, TUCB clique]
+  output_dir: results/multi/test
 
 environment:
   n_arms: 2
   delta: 0.1
   best_mean: 0.5
-  probs: [0.5, 0.4]
 
 agents:
-  - name: tucb
-    class: TUCB
+  - name: single UCB
+    class: UCB
+  - name: UCB clique
+    class: UCBClique
+    params:
+      clique_size: 11
+  - name: TUCB clique
+    class: TUCBClique
+    params:
+      clique_size: 11
+      delta: 0.1

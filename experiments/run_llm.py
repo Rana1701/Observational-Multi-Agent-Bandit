@@ -123,12 +123,7 @@ def run_single_rep(task, shared_model=None):
                     state["other_counts"].copy()
                 )
 
-                action = agent.getNextAction(
-                    build_llm_prompt(
-                        agent_cfg,
-                        agent
-                    )
-                )
+                action = agent.getNextAction(build_llm_prompt(agent_cfg,agent))
 
             elif agent_cfg.get("observes"):
                 obs = [
@@ -142,7 +137,7 @@ def run_single_rep(task, shared_model=None):
                 )
 
             else:
-                action = agent.getNextAction()
+                action = agent.getNextAction()         
 
             actions[name] = action
             state["history"][name].append(action)
@@ -154,11 +149,14 @@ def run_single_rep(task, shared_model=None):
                 state["reward"][name] / (t + 1)
             )
 
-            state["regret"][name] += (
-                state["bandit"].regret(action)
-                if hasattr(state["bandit"], "regret")
-                else state["best"] - state["bandit"].probs[action]
-            )
+            if agent_cfg.get("class") == "TUCBClique":
+                state["regret"][name] = agent.cumul_regret[-1]
+            else:
+                state["regret"][name] += (
+                    state["bandit"].regret(action)
+                    if hasattr(state["bandit"], "regret")
+                    else state["best"] - state["bandit"].probs[action]
+                )
 
             state["regrets_ts"][name].append(
                 state["regret"][name]
