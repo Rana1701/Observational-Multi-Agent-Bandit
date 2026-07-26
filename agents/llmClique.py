@@ -43,30 +43,22 @@ class LLMClique:
         self.history_regret = []
         self.reward = 0.0
 
-    def getNextAction(self, prev_actions=None):
-        del prev_actions
+    def getPrompt(self, i):
+        agent = self.agents[i]
 
-        self.t += 1
+        return request_cot(
+            agent.bandit,
+            agent.t,
+            agent.history,
+            self.prev_actions[i],
+            horizon=agent.t
+        )
 
+    def updateActions(self, actions):
         current_actions = {}
-        step_regrets = []
-        step_rewards = []
 
-        for i in range(self.clique_size):
-
-            prompt = request_cot(
-                self.agents[i].bandit,
-                self.agents[i].t,
-                self.agents[i].history,
-                self.prev_actions[i],
-                horizon=self.t,
-            )
-
-            action = self.agents[i].getNextAction(prompt)
-
+        for i, action in actions.items():
             current_actions[i] = action
-            step_regrets.append(self.agents[i].cumul_regret[-1])
-            step_rewards.append(self.agents[i].reward)
 
         for i in range(self.clique_size):
             self.prev_actions[i] = [
@@ -75,10 +67,39 @@ class LLMClique:
                 if j != i
             ]
 
-        avg_regret = float(np.mean(step_regrets))
+        rewards = []
+        regrets = []
 
-        self.cumul_regret.append(avg_regret)
-        self.history_regret.append(avg_regret)
-        self.reward = float(np.mean(step_rewards))
+        for i, action in actions.items():
 
-        return current_actions[0]
+            agent = self.agents[i]
+
+            reward = agent.getReward(action)
+
+            agent.history[str(action)]["pulls"] += 1
+            agent.history[str(action)]["reward"] += reward
+
+            regret = agent.bandit.regret(action)
+
+            if len(agent.cumul_regret) > 0:
+                agent.cumul_regret.append(
+                    agent.cumul_regret[-1] + regret
+                )
+            else:
+                agent.cumul_regret.append(regret)
+
+            agent.t += 1
+
+            rewards.append(reward)
+            regrets.append(agent.cumul_regret[-1])
+
+        self.reward = float(np.mean(rewards))
+
+        self.history_regret.append(
+            float(np.mean(regrets))
+        )
+
+    def getNextAction(self):
+        raise RuntimeError(
+            "LLMClique uses batched execution. Use getPrompt/updateActions."
+        )

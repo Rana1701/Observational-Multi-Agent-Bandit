@@ -118,7 +118,7 @@ def run_single_rep(task, shared_model=None):
             agent = state["agents"][name]
             agent_cfg = state["cfg"][name]
 
-            if agent_cfg.get("class") == "LLM":
+            if agent_cfg.get("class") in ("LLM", "LLMClique"):
                 agent_cfg["_other_action_counts"] = (
                     state["other_counts"].copy()
                 )
@@ -206,7 +206,7 @@ def run_batched_llm_experiment(cfg, model):
             for name in state["order"]:
                 agent_cfg = state["cfg"][name]
 
-                if agent_cfg.get("class") == "LLM":
+                if agent_cfg.get("class") in ("LLMAgent", "LLMClique"):
                     agent_cfg["_other_action_counts"] = (
                         state["other_counts"].copy()
                     )
@@ -274,7 +274,7 @@ def run_batched_llm_experiment(cfg, model):
 
             for name in state["order"]:
                 agent_cfg = state["cfg"][name]
-                if agent_cfg.get("class") != "LLM":
+                if agent_cfg.get("class") not in ("LLM", "LLMClique"):
                     agent = state["agents"][name]
                     if agent_cfg.get("observes"):
                         obs = [
@@ -298,7 +298,7 @@ def run_batched_llm_experiment(cfg, model):
                 agent = state["agents"][name]
                 # LLM response already updates reward internally only partially
                 # so update reward here for batched execution
-                if state["cfg"][name].get("class") == "LLM":
+                if state["cfg"][name].get("class")  in ("LLM", "LLMClique"):
                     reward = agent.getReward(action)
                     agent.history[str(action)]["pulls"] += 1
                     agent.history[str(action)]["reward"] += reward

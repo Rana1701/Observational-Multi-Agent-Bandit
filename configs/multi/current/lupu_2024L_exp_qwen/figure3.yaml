@@ -1,6 +1,6 @@
 experiment:
   runs: 20
-  horizon: 10
+  horizon: 500
   seed: 42
   n_agents: 11
   order: [UCB clique, single UCB, LLM clique]
