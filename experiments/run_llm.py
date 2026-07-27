@@ -118,12 +118,17 @@ def run_single_rep(task, shared_model=None):
             agent = state["agents"][name]
             agent_cfg = state["cfg"][name]
 
-            if agent_cfg.get("class") in ("LLM", "LLMClique"):
+            if agent_cfg.get("class") == "LLM":
                 agent_cfg["_other_action_counts"] = (
                     state["other_counts"].copy()
                 )
 
-                action = agent.getNextAction(build_llm_prompt(agent_cfg,agent))
+                action = agent.getNextAction(
+                    build_llm_prompt(
+                        agent_cfg,
+                        agent
+                    )
+                )
 
             elif agent_cfg.get("observes"):
                 obs = [
@@ -137,7 +142,7 @@ def run_single_rep(task, shared_model=None):
                 )
 
             else:
-                action = agent.getNextAction()         
+                action = agent.getNextAction()
 
             actions[name] = action
             state["history"][name].append(action)
@@ -149,14 +154,11 @@ def run_single_rep(task, shared_model=None):
                 state["reward"][name] / (t + 1)
             )
 
-            if agent_cfg.get("class") == "TUCBClique":
-                state["regret"][name] = agent.cumul_regret[-1]
-            else:
-                state["regret"][name] += (
-                    state["bandit"].regret(action)
-                    if hasattr(state["bandit"], "regret")
-                    else state["best"] - state["bandit"].probs[action]
-                )
+            state["regret"][name] += (
+                state["bandit"].regret(action)
+                if hasattr(state["bandit"], "regret")
+                else state["best"] - state["bandit"].probs[action]
+            )
 
             state["regrets_ts"][name].append(
                 state["regret"][name]
@@ -206,7 +208,7 @@ def run_batched_llm_experiment(cfg, model):
             for name in state["order"]:
                 agent_cfg = state["cfg"][name]
 
-                if agent_cfg.get("class") in ("LLMAgent", "LLMClique"):
+                if agent_cfg.get("class") == "LLM":
                     agent_cfg["_other_action_counts"] = (
                         state["other_counts"].copy()
                     )
@@ -274,7 +276,7 @@ def run_batched_llm_experiment(cfg, model):
 
             for name in state["order"]:
                 agent_cfg = state["cfg"][name]
-                if agent_cfg.get("class") not in ("LLM", "LLMClique"):
+                if agent_cfg.get("class") != "LLM":
                     agent = state["agents"][name]
                     if agent_cfg.get("observes"):
                         obs = [
@@ -298,13 +300,11 @@ def run_batched_llm_experiment(cfg, model):
                 agent = state["agents"][name]
                 # LLM response already updates reward internally only partially
                 # so update reward here for batched execution
-                if state["cfg"][name].get("class")  in ("LLM", "LLMClique"):
+                if state["cfg"][name].get("class") == "LLM":
                     reward = agent.getReward(action)
                     agent.history[str(action)]["pulls"] += 1
                     agent.history[str(action)]["reward"] += reward
                     agent.t += 1
-                    if t<3 :
-                        print(f"number of parsing errors : {agent.error}")
                     if t == horizon - 1 :
                         print(f"number of parsing errors : {agent.error}")
                 else:

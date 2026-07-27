@@ -10,7 +10,7 @@ class alphaOptimal:
     def __init__(self, bandit, alpha=0.8):
         self.bandit = bandit
         self.alpha = alpha
-
+        self.reward = 0
         self.n_arms = bandit.n_arms
         self.optimal_arm = int(np.argmax(bandit.probs)) 
 
@@ -27,6 +27,7 @@ class alphaOptimal:
             arm = np.random.choice(suboptimal_arms)
 
         reward = self.bandit.pull(arm)
+        self.reward = reward
 
         step_regret = self.bandit.regret(arm)
         if self.t == 1:
