@@ -118,7 +118,7 @@ def get_llm_model_name(cfg):
         )
 
     for agent_cfg in cfg.get("agents", []):
-        if agent_cfg.get("class") == "LLM":
+        if agent_cfg.get("class") in ( "LLM", "LLMClique") :
             return agent_cfg.get("params", {}).get(
                 "model",
                 DEFAULT_LLM,

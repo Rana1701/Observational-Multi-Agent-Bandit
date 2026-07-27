@@ -1,6 +1,6 @@
 experiment:
   runs: 20
-  horizon: 500
+  horizon: 1000
   seed: 42
   n_agents: 11
   order: [UCB clique, single UCB, LLM clique]
@@ -24,3 +24,4 @@ agents:
     class: LLMClique
     params:
       clique_size: 11
+      model : "Qwen/Qwen2.5-7B-Instruct"

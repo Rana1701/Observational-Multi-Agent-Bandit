@@ -40,10 +40,15 @@ def init_run(cfg, run_idx, model):
     a for a in cfg["agents"]
     if a["class"] == "LLMClique")
 
+    # Créer une copie pour éviter de modifier la configuration globale
+    clique_params = agent_cfg["params"].copy()
+    # Supprimer la clé 'model' issue du YAML si elle existe
+    clique_params.pop("model", None)
+
     clique = LLMClique(
         bandit,
-        model=model,
-        **agent_cfg["params"]
+        model=model,  # Utilise l'instance vLLM unique optimisée
+        **clique_params
     )
 
     return {
@@ -120,7 +125,8 @@ def main():
         model=get_llm_model_name(cfg),
         max_model_len=4096,
         max_num_seqs=200,
-        gpu_memory_utilization=0.95
+        gpu_memory_utilization=0.95,
+        enable_prefix_caching = True
     )
 
     results = run_experiment(cfg, model)
