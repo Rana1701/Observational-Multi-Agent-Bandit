@@ -2,17 +2,22 @@ experiment:
   runs: 20
   horizon: 1000
   seed: 42
-  n_jobs: 4
   n_agents: 20
   output_dir: results/multi/current/lupu_2024L_exp_qwen/figure4
 
 environment:
   n_arms: 10
-  delta: 0.1
-  best_mean: 0.5
-  probs: [0.4,0.5,0.4,0.4,0.4,0.4,0.4,0.4,0.4,0.4]
-
 
 agents:
-  - name: tucb
-    class: TUCB
+  - name: single UCB
+    class: UCB
+
+  - name: UCB clique
+    class: UCBClique
+    params:
+      clique_size: 20
+
+  - name: LLM graph
+    class: LLM
+    params:
+      model: Qwen/Qwen2.5-7B-Instruct
