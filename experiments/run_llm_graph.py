@@ -77,8 +77,11 @@ def run_experiment(cfg, model):
             for graph, data in state["agents"].items():
                 for i, agent in enumerate(data["agents"]):
                     other_actions = data["prev_actions"][i]
-                    counts = {str(a): 0 for a in range(state["bandit"].n_arms)}
-                    for a in other_actions: counts[str(a)] += 1
+                    other_actions = data["prev_actions"][i]
+
+                    counts = [0] * state["bandit"].n_arms
+                    for a in other_actions:
+                        counts[a] += 1
 
                     prompt = request_cot(agent.bandit, agent.t, agent.history, counts, horizon)
                     prompts.append(prompt)

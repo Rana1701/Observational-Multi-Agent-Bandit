@@ -71,7 +71,7 @@ Let’s think step by step to make sure we make a good choice
 
 def request_cot(bandit, nb_plays, arm_stats, other_actions=None, horizon= 500):
 
-    colors = ["blue","green","red","yellow","purple","orange","black","white"]
+    colors = ["blue","green","red","yellow","purple","orange","black","white","pink","brown","cyan","gray","gold","silver","lime","navy"]
 
     arms = colors[:bandit.n_arms]
 
