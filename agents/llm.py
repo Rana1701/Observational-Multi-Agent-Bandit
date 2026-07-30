@@ -70,7 +70,7 @@ class LLMAgent:
     def extract_reponse(self, response_text):
         response = None
         action = None
-        colors = ["blue", "green", "red", "yellow", "purple", "orange", "black", "white"]
+        colors = ["blue","green","red","yellow","purple","orange","black","white","pink","brown","cyan","gray","gold","silver","lime","navy"]
 
         self.explanation = response_text
 

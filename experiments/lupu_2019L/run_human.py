@@ -3,7 +3,7 @@ import pandas as pd
 import argparse
 import os
 import sys
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 from environnement.bernoulli_bandit import BernoulliBandit
 from utils.experiment_utils import load_config, save_multi_results
 from agents.tucb import TUCB 

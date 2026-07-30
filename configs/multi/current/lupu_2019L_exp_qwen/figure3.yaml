@@ -4,7 +4,7 @@ experiment:
   seed: 42
   n_agents: 11
   order: [UCB clique, single UCB, LLM clique]
-  output_dir: results/multi/current/lupu_2024L_exp_qwen/figure3
+  output_dir: results/multi/current/lupu_2019L_exp_qwen/figure3
 
 environment:
   n_arms: 2

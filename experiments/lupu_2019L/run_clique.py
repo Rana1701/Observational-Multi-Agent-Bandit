@@ -4,7 +4,7 @@ import os
 import sys
 import random
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 from environnement.bernoulli_bandit import BernoulliBandit
 from utils.experiment_utils import load_config, save_multi_results
 from agents.tucb import TUCB 
@@ -75,22 +75,21 @@ def run_simulation():
         tucb_clique_history[run, :] = np.mean(run_step_regrets, axis=0)
 
     # Moyennage des courbes sur l'ensemble des runs pour stabiliser la variance
-    all_plots_data = {
-        "Single UCB": np.mean(single_ucb_history, axis=0).tolist(),
-        "UCB clique": np.mean(ucb_clique_history, axis=0).tolist(),
-        "Target-UCB clique": np.mean(tucb_clique_history, axis=0).tolist()
-    }
-    
-    # Encapsulation finale pour forcer l'affichage propre dans votre framework commun
-    payload = {
-        "TUCB_vs_UCB_Clique": {
-            label: regrets for label, regrets in all_plots_data.items()
+    results = [{
+        "cumulated_regrets": {
+            "Single UCB": np.mean(single_ucb_history, axis=0),
+            "UCB clique": np.mean(ucb_clique_history, axis=0),
+            "Target-UCB clique": np.mean(tucb_clique_history, axis=0)
+        },
+        "time_averaged_rewards": {
+            "Single UCB": np.zeros(horizon),
+            "UCB clique": np.zeros(horizon),
+            "Target-UCB clique": np.zeros(horizon)
         }
-    }
-    
-    print("Simulation terminée. Sauvegarde des courbes en cours...")
-    save_multi_results(payload.values(), config)
+    }]
 
+    print("Simulation terminée. Sauvegarde des courbes en cours...")
+    save_multi_results(results, config)
 
 if __name__ == "__main__":
     run_simulation()
