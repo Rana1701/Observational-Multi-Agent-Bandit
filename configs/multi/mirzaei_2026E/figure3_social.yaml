@@ -1,0 +1,24 @@
+experiment:
+  runs: 20
+  horizon: 200
+  seed: 42
+  output_dir: results/multi/lupu_2019L/figure3_social
+  add_opt: false
+  order: [social, non_learner]
+
+environment:
+  n_arms: 10
+  delta: 0.2
+  best_mean: 0.9
+
+agents:
+  - name: social
+    class: OUCB
+    params:
+      nbr_neighbours: 1
+      c: 1.0
+      social_weight: 1.0
+  - name: non_learner
+    class: alphaOptimal
+    params:
+      alpha: 0.5
