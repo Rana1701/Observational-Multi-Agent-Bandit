@@ -3,6 +3,7 @@ import os
 import sys
 import random
 import numpy as np
+import pickle
 from multiprocessing import Pool
 from vllm import LLM, SamplingParams
 
@@ -26,18 +27,8 @@ def batch_generate(model, prompts):
     if not prompts:
         return []
 
-    params = SamplingParams(
-        temperature=0,
-        max_tokens=1024,
-        top_p=0.9,
-        stop=["</Answer>"]
-    )
-
-    outputs = model.generate(
-        prompts,
-        params
-    )
-
+    params = SamplingParams(temperature=0,max_tokens=1024,top_p=0.9,stop=["</Answer>"])
+    outputs = model.generate(prompts,params)
     responses = []
     for out in outputs:
         text = out.outputs[0].text.strip()
@@ -52,14 +43,9 @@ def init_run(cfg, run_idx, shared_model=None):
     """Initialize one experiment run."""
     exp = cfg["experiment"]
     seed = run_seed(exp.get("seed"), run_idx)
-
     random.seed(seed)
     np.random.seed(seed)
-
-    bandit = build_bandit(
-        cfg["environment"],
-        seed
-    )
+    bandit = build_bandit(cfg["environment"],seed)
 
     order = exp.get("order") or [
         a["name"] for a in cfg["agents"]
@@ -103,12 +89,7 @@ def init_run(cfg, run_idx, shared_model=None):
 def run_single_rep(task, shared_model=None):
     """Run one experiment replica (used for non LLM experiments)."""
     run_idx, cfg = task
-    state = init_run(
-        cfg,
-        run_idx,
-        shared_model
-    )
-
+    state = init_run(cfg,run_idx,shared_model)
     horizon = cfg["experiment"]["horizon"]
 
     for t in range(horizon):
@@ -119,16 +100,8 @@ def run_single_rep(task, shared_model=None):
             agent_cfg = state["cfg"][name]
 
             if agent_cfg.get("class") == "LLM":
-                agent_cfg["_other_action_counts"] = (
-                    state["other_counts"].copy()
-                )
-
-                action = agent.getNextAction(
-                    build_llm_prompt(
-                        agent_cfg,
-                        agent
-                    )
-                )
+                agent_cfg["_other_action_counts"] = (state["other_counts"].copy())
+                action = agent.getNextAction(build_llm_prompt(agent_cfg,agent))
 
             elif agent_cfg.get("observes"):
                 obs = [
@@ -137,9 +110,7 @@ def run_single_rep(task, shared_model=None):
                     if len(state["history"][o]) > t
                 ]
 
-                action = agent.getNextAction(
-                    obs or None
-                )
+                action = agent.getNextAction(obs or None)
 
             else:
                 action = agent.getNextAction()
@@ -157,12 +128,10 @@ def run_single_rep(task, shared_model=None):
             state["regret"][name] += (
                 state["bandit"].regret(action)
                 if hasattr(state["bandit"], "regret")
-                else state["best"] - state["bandit"].probs[action]
-            )
+                else state["best"] - state["bandit"].probs[action])
 
             state["regrets_ts"][name].append(
-                state["regret"][name]
-            )
+                state["regret"][name])
 
         for name in cfg["experiment"].get("track_other_actions_for", []):
             if name in actions:
@@ -173,31 +142,21 @@ def run_single_rep(task, shared_model=None):
 def init_batched_runs(cfg, model):
     """Initialize all runs sharing the same LLM."""
     states = []
-
     for run_idx in range(cfg["experiment"].get("runs", 20)):
-        states.append(
-            init_run(
-                cfg,
-                run_idx,
-                model
-            )
-        )
+        states.append(init_run(cfg,run_idx,model))
 
     return states
 
 
 def run_batched_llm_experiment(cfg, model):
     """Run multiple replicas with batched LLM inference."""
-    states = init_batched_runs(
-        cfg,
-        model
-    )
+    states = init_batched_runs(cfg,model)
+    save_dir = cfg["experiment"]["output_dir"]
+    os.makedirs(save_dir, exist_ok=True)
+    checkpoint_file = os.path.join(save_dir,"checkpoint_results.pkl")
 
     horizon = cfg["experiment"]["horizon"]
-    track = cfg["experiment"].get(
-        "track_other_actions_for",
-        []
-    )
+    track = cfg["experiment"].get("track_other_actions_for",[])
 
     for t in range(horizon):
         prompts = []
@@ -209,30 +168,13 @@ def run_batched_llm_experiment(cfg, model):
                 agent_cfg = state["cfg"][name]
 
                 if agent_cfg.get("class") == "LLM":
-                    agent_cfg["_other_action_counts"] = (
-                        state["other_counts"].copy()
-                    )
+                    agent_cfg["_other_action_counts"] = (state["other_counts"].copy())
 
-                    prompts.append(
-                        build_llm_prompt(
-                            agent_cfg,
-                            state["agents"][name]
-                        )
-                    )
-
-                    refs.append(
-                        (
-                            state,
-                            name
-                        )
-                    )
+                    prompts.append(build_llm_prompt(agent_cfg,state["agents"][name]))
+                    refs.append((state,name))
 
         # One batched generation for all runs
-        responses = batch_generate(
-            model,
-            prompts
-        )
-
+        responses = batch_generate(model,prompts)
         actions_by_state = {}
 
         # Apply LLM responses
@@ -252,10 +194,7 @@ def run_batched_llm_experiment(cfg, model):
                 )
             )
 
-        extract_responses = batch_generate(
-            model,
-            extract_prompts
-        )
+        extract_responses = batch_generate(model,extract_prompts)
 
 
         # Parsing des réponses finales
@@ -285,9 +224,7 @@ def run_batched_llm_experiment(cfg, model):
                             if len(state["history"][o]) > t
                         ]
 
-                        action = agent.getNextAction(
-                            obs or None
-                        )
+                        action = agent.getNextAction(obs or None)
                     else:
                         action = agent.getNextAction()
 
@@ -315,12 +252,10 @@ def run_batched_llm_experiment(cfg, model):
 
                 state["regret"][name] += (state["bandit"].regret(action)
                     if hasattr(state["bandit"], "regret")
-                    else state["best"] - state["bandit"].probs[action]
-                )
+                    else state["best"] - state["bandit"].probs[action])
 
                 state["regrets_ts"][name].append(
-                    state["regret"][name]
-                )
+                    state["regret"][name])
 
             for name in track:
                 if name in actions:
@@ -328,13 +263,34 @@ def run_batched_llm_experiment(cfg, model):
                         actions[name]
                     ] += 1
 
-    return [
-        format_result(
-            state,
-            cfg
-        )
-        for state in states
-    ]
+
+        # Periodic checkpoint every 10 steps
+        if t % 10 == 0:
+            checkpoint = [
+                format_result(state,cfg)
+                for state in states]
+
+            with open(checkpoint_file,"wb") as f:
+                pickle.dump(checkpoint,f)
+                f.flush()
+                os.fsync(f.fileno())
+
+            print(f"Checkpoint saved at step {t}/{horizon}")
+
+    results = []
+
+    for idx, state in enumerate(states):
+
+        result = format_result(state,cfg)
+        results.append(result)
+        run_file = os.path.join(save_dir,f"run_{idx}.pkl")
+
+        with open(run_file,"wb") as f:
+            pickle.dump(result,f)
+
+        print(f"Saved completed run {idx+1}/{len(states)}")
+
+    return results
 
 
 def format_result(state, cfg):
@@ -346,23 +302,18 @@ def format_result(state, cfg):
 
     for name in state["order"]:
         out["time_averaged_rewards"][name] = np.array(
-            state["rewards_ts"][name]
-        )
+            state["rewards_ts"][name])
 
         out["cumulated_regrets"][name] = np.array(
-            state["regrets_ts"][name]
-        )
+            state["regrets_ts"][name])
 
     if cfg["experiment"].get("add_opt", False):
         horizon = cfg["experiment"]["horizon"]
 
         out["time_averaged_rewards"]["OPT"] = (
-            np.ones(horizon) * state["best"]
-        )
+            np.ones(horizon) * state["best"])
 
-        out["cumulated_regrets"]["OPT"] = np.zeros(
-            horizon
-        )
+        out["cumulated_regrets"]["OPT"] = np.zeros(horizon)
 
     return out
 
@@ -378,60 +329,34 @@ def main():
     )
 
     args = parser.parse_args()
-
-    cfg = load_config(
-        args.config
-    )
-
+    cfg = load_config(args.config)
     exp = cfg["experiment"]
-    runs = exp.get(
-        "runs",
-        20
-    )
+    runs = exp.get("runs",20)
 
     results = []
 
     if uses_llm(cfg):
         print("Loading LLM once...")
 
-        model = LLM(
-            model=get_llm_model_name(cfg),
+        model = LLM(model=get_llm_model_name(cfg),
             max_model_len=4096,
             max_num_seqs=150,
-            gpu_memory_utilization=0.95
-        )
+            gpu_memory_utilization=0.95)
 
-        results = run_batched_llm_experiment(
-            cfg,
-            model
-        )
+        results = run_batched_llm_experiment(cfg,model)
 
     else:
-        print(
-            f"Running {runs} replicas..."
-        )
+        print(f"Running {runs} replicas...")
 
-        tasks = [
-            (i, cfg)
-            for i in range(runs)
-        ]
+        tasks = [(i, cfg) for i in range(runs)]
 
         with Pool(
             processes=exp.get("n_jobs", 4)
         ) as pool:
-            results = pool.map(
-                run_single_rep,
-                tasks
-            )
+            results = pool.map(run_single_rep,tasks)
 
-    save_multi_results(
-        results,
-        cfg
-    )
-
-    print(
-        f"Saved {len(results)} runs"
-    )
+    save_multi_results(results,cfg)
+    print(f"Saved {len(results)} runs")
 
 
 if __name__ == "__main__":
