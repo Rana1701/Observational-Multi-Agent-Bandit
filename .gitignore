@@ -8,3 +8,5 @@ results/
 Target-UCB/
 logs/
 venv/
+*.out
+experiment_logs/

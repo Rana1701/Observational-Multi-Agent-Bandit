@@ -3,7 +3,7 @@
 #SBATCH --account=aip-adurand
 #SBATCH --time=0-22:59
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:4
+#SBATCH --gpus-per-node=h100:4
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=256G
 #SBATCH --output=%x-%j.out
@@ -18,10 +18,13 @@ module load StdEnv/2023 gcc/12.3 cuda/12.6 python/3.12 arrow/18.1.0 \
 # ── Env ───────────────────────────────────────────────────────────────────────
 source "$SCRATCH/venv/bin/activate"
 
-export HF_HOME=$SCRATCH/hf_cache
-export TRANSFORMERS_CACHE=$HF_HOME
+export PYTHONNOUSERSITE=1
+export HF_HOME=/project/6102313/shared/hf_cache
+export HF_HUB_CACHE=/project/6102313/shared/hf_cache/hub
+export TRANSFORMERS_CACHE=/project/6102313/shared/hf_cache
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
+
 export COMET_MODE=DISABLED
 export HF_DATASETS_CACHE=$SCRATCH/hf_datasets_cache
 export TORCH_HOME=$SCRATCH/torch_cache
