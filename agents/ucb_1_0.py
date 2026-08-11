@@ -26,7 +26,7 @@ class UCB1:
                 return i
 
         # UCB scores for each arm
-        ucb = self.empirical_mean + np.sqrt(0.25 * np.log(self.t) / self.N)
+        ucb = self.empirical_mean + np.sqrt(0.5 * np.log(self.t) / self.N)
 
         return int(np.argmax(ucb))
 

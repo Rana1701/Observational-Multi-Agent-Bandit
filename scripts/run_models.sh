@@ -18,7 +18,8 @@ module load StdEnv/2023 gcc/12.3 cuda/12.6 python/3.12 arrow/18.1.0 \
 # ── Env ───────────────────────────────────────────────────────────────────────
 source "$SCRATCH/venv/bin/activate"
 
-export HF_HOME=$SCRATCH/hf_cache
+export HF_HOME=/project/6102313/shared/hf_cache
+export HF_HUB_CACHE=/project/6102313/shared/hf_cache/hub
 export TRANSFORMERS_CACHE=$HF_HOME
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
@@ -29,6 +30,9 @@ export TORCHINDUCTOR_CACHE_DIR=$SCRATCH/torch_compile_cache
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export TOKENIZERS_PARALLELISM=false
 export PYTHONPATH="$SLURM_SUBMIT_DIR/src:${PYTHONPATH:-}"
+
+unset TRANSFORMERS_OFFLINE
+unset HF_HUB_OFFLINE
 
 mkdir -p "$TORCH_HOME" "$TORCHINDUCTOR_CACHE_DIR"
 

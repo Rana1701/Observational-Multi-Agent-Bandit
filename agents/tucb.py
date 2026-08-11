@@ -33,7 +33,7 @@ class TUCB:
 
         self.t += 1
 
-        if len(prev_actions) != self.neighbours:
+        if self.t > 1 and len(prev_actions) != self.neighbours:
             raise ValueError("Mismatch between neighbours and actions")
 
         # update targets

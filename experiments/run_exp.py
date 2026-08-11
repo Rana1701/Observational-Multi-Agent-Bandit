@@ -139,6 +139,11 @@ def run_single_rep(task, shared_model=None):
     order = exp.get("order") or [a["name"] for a in agent_cfgs]
     horizon = exp["horizon"]
 
+    # Ensure all agents in config are included in order and history.
+    for a in agent_cfgs:
+        if a["name"] not in order:
+            order.append(a["name"])
+
     out = {
         "time_averaged_rewards": {},
         "cumulated_regrets": {}
@@ -159,7 +164,7 @@ def run_single_rep(task, shared_model=None):
 
     # History of actions from previous timesteps
     other_action_counts = [0] * n_arms
-    print("RESET COUNTS:", other_action_counts)
+    # print("RESET COUNTS:", other_action_counts)
 
     # Create agents
     for a in agent_cfgs:
@@ -195,11 +200,10 @@ def run_single_rep(task, shared_model=None):
                 action = agent.getNextAction(prompt)
 
             elif a.get("observes"):
-                observed = [
-                    global_history[o][t]
-                    for o in a.get("observes", [])
-                    if o in global_history and len(global_history[o]) > t
-                ]
+                observed = []
+                for o in a.get("observes", []):
+                    if o in global_history and len(global_history[o]) > 0:
+                        observed.append(global_history[o][-1])
                 action = agent.getNextAction(observed or None)
             else:
                 action = agent.getNextAction()
@@ -226,7 +230,7 @@ def run_single_rep(task, shared_model=None):
 
         # Update observed actions after all agents have played
         for name, action in current_actions.items():
-            if name in cfg["experiment"]["track_other_actions_for"]:
+            if name in cfg["experiment"].get("track_other_actions_for", []):
                 if 0 <= action < len(other_action_counts):
                     other_action_counts[action] += 1
 
