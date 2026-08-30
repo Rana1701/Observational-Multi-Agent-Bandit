@@ -142,11 +142,20 @@ def main():
 
     colors_palette = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     
-    # Agent 1: Solid line ("-")
-    # Agent 2: Long dashed line ((0, (10, 5))) instead of "--"
-    # Agent 3: Dotted line with tight spacing ((0, (1, 3))) 
-    # Agent 4: Short dashed line with equal spacing ((0, (4, 4)))
-    linestyles_palette = ["-", (0, (10, 5)), (0, (1, 3)), (0, (4, 4))]
+    # Use a larger palette so distinct agents under the same parent group
+    # (for example Qwen/Chain and Qwen/Small-World) do not reuse the same linestyle.
+    linestyles_palette = [
+        "-",
+        "--",
+        "-.",
+        ":",
+        (0, (1, 1)),
+        (0, (3, 1, 1, 1)),
+        (0, (5, 1)),
+        (0, (2, 2)),
+        (0, (8, 2, 1, 2)),
+        (0, (1, 3)),
+    ]
     subfolder_colors = {}
     agent_linestyles = {}
 
@@ -195,7 +204,7 @@ def main():
     ax.set_ylabel(y_label) 
     ax.set_title(plot_title)
     ax.set_ylim(min, max)
-    ax.legend()
+    ax.legend(handlelength=4)
     ax.grid(True, alpha=0.3)
 
     output_path = Path(args.output)

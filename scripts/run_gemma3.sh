@@ -37,7 +37,7 @@ mkdir -p "$TORCH_HOME" "$TORCHINDUCTOR_CACHE_DIR"
 
 # ── Init ──────────────────────────────────────────────────────────────────────
 OUT="$SLURM_SUBMIT_DIR/outputs_news2/experiment_logs"
-CONFIG_DIR="$SLURM_SUBMIT_DIR/configs/multi/current/models_comparison"
+CONFIG_DIR="$SLURM_SUBMIT_DIR/configs/solo/current/models_comparison"
 
 mkdir -p "$OUT"
 mkdir -p "$CONFIG_DIR"
@@ -51,8 +51,7 @@ echo ""
 
 # ── Models ────────────────────────────────────────────────────────────────────
 MODELS=(
-    "Qwen/Qwen3-32B"
-    #"Qwen/Qwen3-VL-32B-Thinking"
+    "google/gemma-3-27b-it"
 )
 
 NUM_GPUS=4
@@ -102,7 +101,7 @@ for MODEL in "${MODELS[@]}"; do
 experiment:
   seed: 40
   n_jobs: 4
-  output_dir: results/multi/current/models_comparison/$NAME
+  output_dir: results/solo/current/models_comparison//$NAME
   horizon: 500
   runs: 20
   order: [ucb, Greedy, ts, LLM]
@@ -127,7 +126,7 @@ agents:
 
   - name: LLM
     class: LLM
-    prompt: default
+    prompt: no_observation
     params:
       model: $MODEL
 EOF
@@ -143,9 +142,7 @@ EOF
     CUDA_VISIBLE_DEVICES=$gpu \
     python "$SLURM_SUBMIT_DIR/experiments/run_llm.py" \
         --config "$CONFIG" \
-        --resume \
         >"$log" 2>&1 &
-        
 
     pid=$!
     GPU_BUSY[$gpu]=$pid

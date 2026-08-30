@@ -26,6 +26,6 @@ agents:
 
   - name: LLM
     class: LLM
-    prompt: default
+    prompt: no_observation
     params:
       model: allenai/Olmo-3-32B-Think-DPO

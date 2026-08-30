@@ -1,7 +1,7 @@
 experiment:
   seed: 40
   n_jobs: 4
-  output_dir: results/multi/current/models_comparison/OLMo-2-0325-32B-Instruct
+  output_dir: results/solo/current/models_comparison//OLMo-2-0325-32B-Instruct
   horizon: 500
   runs: 20
   order: [ucb, Greedy, ts, LLM]

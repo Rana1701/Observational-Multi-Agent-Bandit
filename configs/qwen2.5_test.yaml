@@ -1,10 +1,10 @@
 experiment:
   seed: 40
   n_jobs: 4
-  output_dir: results/solo/current/models_comparison//Olmo-3-32B-Think-DPO
+  output_dir: results/multi/current/qwen
   horizon: 500
   runs: 20
-  order: [ucb, Greedy, ts, LLM]
+  order: [ucb,Greedy, ts ,Qwen]
   track_other_actions_for: ["ucb", "Greedy", "ts"]
   add_opt: False
 
@@ -17,15 +17,12 @@ environment:
 agents:
   - name: ucb
     class: UCB
-
   - name: ts
     class: TS
-
   - name: Greedy
     class: Greedy
-
-  - name: LLM
+  - name: Qwen
     class: LLM
     prompt: default
     params:
-      model: allenai/Olmo-3-32B-Think-DPO
+      model: Qwen/Qwen2.5-32B

@@ -159,7 +159,7 @@ def run_single_rep(task, shared_model=None):
 
     # History of actions from previous timesteps
     other_action_counts = [0] * n_arms
-    print("RESET COUNTS:", other_action_counts)
+    # print("RESET COUNTS:", other_action_counts)
 
     # Create agents
     for a in agent_cfgs:
