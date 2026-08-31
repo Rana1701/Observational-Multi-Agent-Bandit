@@ -1,7 +1,7 @@
 experiment:
   seed: 40
   n_jobs: 4
-  output_dir: results/multi/current/models_comparison/Qwen3-VL-32B-Thinking
+  output_dir: results/solo/current/models_comparison//DeepSeek-R1-Distill-Qwen-32B
   horizon: 500
   runs: 20
   order: [ucb, Greedy, ts, LLM]
@@ -26,6 +26,6 @@ agents:
 
   - name: LLM
     class: LLM
-    prompt: default
+    prompt: no_observation
     params:
-      model: Qwen/Qwen3-VL-32B-Thinking
+      model: deepseek-ai/DeepSeek-R1-Distill-Qwen-32B

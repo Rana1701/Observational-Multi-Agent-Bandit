@@ -36,7 +36,7 @@ export PYTHONPATH="$SLURM_SUBMIT_DIR/src:${PYTHONPATH:-}"
 mkdir -p "$TORCH_HOME" "$TORCHINDUCTOR_CACHE_DIR"
 
 # ── Init ──────────────────────────────────────────────────────────────────────
-OUT="$SLURM_SUBMIT_DIR/outputs_news2/experiment_logs"
+OUT="$SLURM_SUBMIT_DIR/outputs_with_observation/experiment_logs"
 CONFIG_DIR="$SLURM_SUBMIT_DIR/configs/multi/current/models_comparison"
 
 mkdir -p "$OUT"
@@ -52,7 +52,7 @@ echo ""
 # ── Models ────────────────────────────────────────────────────────────────────
 MODELS=(
     "Qwen/Qwen3-32B"
-    #"Qwen/Qwen3-VL-32B-Thinking"
+    "Qwen/Qwen3-VL-32B-Thinking"
 )
 
 NUM_GPUS=4

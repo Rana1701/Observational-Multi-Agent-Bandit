@@ -158,6 +158,7 @@ def main():
     ]
     subfolder_colors = {}
     agent_linestyles = {}
+    llm_primary_seen = False
 
     for input_path in args.input:
         input_path = Path(input_path)
@@ -170,7 +171,14 @@ def main():
             agent_name = agent_dir.name.lower()
             parent_name = agent_dir.parent.name
 
-            if args.marker:
+            if "llm" in agent_name or "llm" in parent_name.lower():
+                color = "#FF0000"
+                if not llm_primary_seen:
+                    linestyle = "-"
+                    llm_primary_seen = True
+                else:
+                    linestyle = "--"
+            elif args.marker:
                 if parent_name not in subfolder_colors:
                     subfolder_colors[parent_name] = colors_palette[len(subfolder_colors) % len(colors_palette)]
                 color = subfolder_colors[parent_name]
@@ -190,6 +198,20 @@ def main():
                     label = f"{agent_dir.parent.name}/{agent_dir.name}"
                 else:
                     label = input_path.name
+
+            if "llm" not in agent_name and "llm" not in parent_name.lower() and not args.marker:
+                if label_idx < len(labels):
+                    label = labels[label_idx]
+                elif len(agent_dirs) > 1:
+                    label = f"{agent_dir.parent.name}/{agent_dir.name}"
+                else:
+                    label = input_path.name
+
+            if "llm" in agent_name or "llm" in parent_name.lower():
+                if label_idx < len(labels):
+                    label = labels[label_idx]
+                else:
+                    label = f"{parent_name}/{agent_dir.name}"
 
             # Load the requested metric type dataset
             regrets = load_data(agent_dir, filename_prefix)
