@@ -26,13 +26,12 @@ from agents.ucb_1_0 import UCB1
 from agents.oucb import OUCB
 from agents.sbl_fe import SBLFE
 from utils.prompt_builder import (
-    build_prompt_history,
     build_prompt_ucb_history,
     build_prompt_exploit,
     build_prompt_explore,
     build_prompt_krishnamurthy,
-    build_prompt,
     request_cot,
+    request_cot_no_observation,
     request_response
 )
 
@@ -57,7 +56,7 @@ AGENTS = {
 
 PROMPT_BUILDERS = {
     "default": request_cot,
-    "history": build_prompt_history ,
+    "no_observation": request_cot_no_observation,
     "ucb_history": build_prompt_ucb_history,
     "exploit": build_prompt_exploit,
     "explore": build_prompt_explore,

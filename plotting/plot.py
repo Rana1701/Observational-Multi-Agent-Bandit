@@ -147,6 +147,7 @@ def main():
     # Agent 3: Dotted line with tight spacing ((0, (1, 3))) 
     # Agent 4: Short dashed line with equal spacing ((0, (4, 4)))
     linestyles_palette = ["-", (0, (10, 5)), (0, (1, 3)), (0, (4, 4))]
+    
     subfolder_colors = {}
     agent_linestyles = {}
 
@@ -195,7 +196,7 @@ def main():
     ax.set_ylabel(y_label) 
     ax.set_title(plot_title)
     ax.set_ylim(min, max)
-    ax.legend()
+    ax.legend(handlelength=4)
     ax.grid(True, alpha=0.3)
 
     output_path = Path(args.output)
